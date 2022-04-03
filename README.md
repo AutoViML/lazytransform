@@ -44,7 +44,7 @@ The following models are currently supported:
 <li>LightGBM models</li>
 </ol>
 However, you must install and import those models on your own and define them as model variables before passing those variables to lazytransform.
-<p>
+
 ## How to install lazytransform
 <p>
 **Prerequsites:**
