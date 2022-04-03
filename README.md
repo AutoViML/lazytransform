@@ -51,13 +51,15 @@ However, you must install and import those models on your own and define them as
 <ol>
 <li><b>lazytransform is built using pandas, numpy, scikit-learn, category_encoders and imb-learn libraries.</b> It should run on most Python 3 Anaconda installations without additional installs. You won't have to import any special libraries other than "imb-learn" and "category_encoders".</li>
 </ol>
-- [Anaconda](https://docs.anaconda.com/anaconda/install/)
-
+[Anaconda](https://docs.anaconda.com/anaconda/install/)
+<p>
 To install from PyPi:
 
 ```
 pip install lazytransform 
+```
 or
+```
 pip install git+https://github.com/AutoViML/lazytransform.git
 ```
 
@@ -66,7 +68,9 @@ To install from source:
 ```
 cd <lazytransform_Destination>
 git clone git@github.com:AutoViML/lazytransform.git
+```
 # or download and unzip https://github.com/AutoViML/lazytransform/archive/master.zip
+```
 conda create -n <your_env_name> python=3.7 anaconda
 conda activate <your_env_name> # ON WINDOWS: `source activate <your_env_name>`
 cd lazytransform
