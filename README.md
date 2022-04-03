@@ -47,6 +47,7 @@ However, you must install and import those models on your own and define them as
 
 ## How to install lazytransform
 <p>
+
 **Prerequsites:**
 <ol>
 <li><b>lazytransform is built using pandas, numpy, scikit-learn, category_encoders and imb-learn libraries.</b> It should run on most Python 3 Anaconda installations without additional installs. You won't have to import any special libraries other than "imb-learn" and "category_encoders".</li>
@@ -76,10 +77,13 @@ conda activate <your_env_name> # ON WINDOWS: `source activate <your_env_name>`
 cd lazytransform
 pip install -r requirements.txt
 ```
+
 ## Usage
 <p>
-You can invoke lazytransform as a scikit-learn compatible fit and transform or a fit and predict pipeline. See syntax below.
+You can invoke `lazytransform` as a scikit-learn compatible fit and transform or a fit and predict pipeline. See syntax below.<p>
+
 ```
+from lazytransform import LazyTransformer
 lazy = LazyTransformer(model=False, encoders='auto', scalers=None, 
         date_to_string=False, transform_target=False, imbalanced=False)
 ```
@@ -89,7 +93,7 @@ lazy = LazyTransformer(model=False, encoders='auto', scalers=None,
 X_trainm, y_trainm = lazy.fit_transform(X_train, y_train)
 X_testm = lazy.transform(X_test)
 ```
-### If using a model in pipeline, use must use fit and predict only
+### If you are using a model in pipeline, use must use fit and predict only
 ```
 lazy = LazyTransformer(model=RandomForestClassifier(), encoders='auto', scalers=None, 
         date_to_string=False, transform_target=False, imbalanced=False)
@@ -124,6 +128,26 @@ Once you import it, you can define the object by giving several options such as:
   - `target` - Target Encoding
   - `count` - Count Encoding
   - `glm`,`glmm` - Generalized Linear Model Encoding
+<br>Here is a description of various encoders and their uses from the excellent <a href="https://contrib.scikit-learn.org/category_encoders/"> category_encoders</a> python library:<br>
+    - `HashingEncoder`: HashingEncoder is a multivariate hashing implementation with configurable dimensionality/precision. The advantage of this encoder is that it does not maintain a dictionary of observed categories. Consequently, the encoder does not grow in size and accepts new values during data scoring by design.
+    - `SumEncoder`: SumEncoder is a Sum contrast coding for the encoding of categorical features.
+    - `PolynomialEncoder`: PolynomialEncoder is a Polynomial contrast coding for the encoding of categorical features.
+    - `BackwardDifferenceEncoder`: BackwardDifferenceEncoder is a Backward difference contrast coding for encoding categorical variables.
+    - `OneHotEncoder`: OneHotEncoder is the traditional Onehot (or dummy) coding for categorical features. It produces one feature per category, each being a binary.
+    - `HelmertEncoder`: HelmertEncoder uses the Helmert contrast coding for encoding categorical features.
+    - `OrdinalEncoder`: OrdinalEncoder uses Ordinal encoding to designate a single column of integers to represent the categories in your data. Integers however start in the same order in which the categories are found in your dataset. If you want to change the order, just sort the column and send it in for encoding.
+    - `FrequencyEncoder`: FrequencyEncoder is a count encoding technique for categorical features. For a given categorical feature, it replaces the names of the categories with the group counts of each category.
+    - `BaseNEncoder`: BaseNEncoder encodes the categories into arrays of their base-N representation. A base of 1 is equivalent to one-hot encoding (not really base-1, but useful), a base of 2 is equivalent to binary encoding. N=number of actual categories is equivalent to vanilla ordinal encoding.
+    - `TargetEncoder`: TargetEncoder performs Target encoding for categorical features. It supports following kinds of targets: binary and continuous. For multi-class targets it uses a PolynomialWrapper.
+    - `CatBoostEncoder`: CatBoostEncoder performs CatBoost coding for categorical features. It supports the following kinds of targets: binary and continuous. For polynomial target support, it uses a PolynomialWrapper. This is very similar to leave-one-out encoding, but calculates the values “on-the-fly”. Consequently, the values naturally vary during the training phase and it is not necessary to add random noise.
+    - `WOEEncoder`: WOEEncoder uses the Weight of Evidence technique for categorical features. It supports only one kind of target: binary. For polynomial target support, it uses a PolynomialWrapper. It cannot be used for Regression.
+    - `JamesSteinEncoder`: JamesSteinEncoder uses the James-Stein estimator. It supports 2 kinds of targets: binary and continuous. For polynomial target support, it uses PolynomialWrapper.
+    For feature value i, James-Stein estimator returns a weighted average of:
+    The mean target value for the observed feature value i.
+    The mean target value (regardless of the feature value).
+    - `QuantileEncoder`: This is a very good encoder for Regression tasks. See Paper and article:
+    https://towardsdatascience.com/quantile-encoder-eb33c272411d
+
 - `scalers`: could be one of three main scalers used in scikit-learn models to transform numeric features. Default is None. Scalers are used in the last step of the pipeline to scale all features that have transformed. However, you might want to avoid scaling in NLP datasets since after TFiDF vectorization, scaling them may not make sense. But it is up to you. The 4 options are:
   - `None` No scaler. Great for almost all datasets. Test it first and then try one of the scalers below.
   - `std` standard scaler. Great for almost all datasets.
@@ -137,6 +161,26 @@ Once you import it, you can define the object by giving several options such as:
   - `1` more verbiage. Great for knowing how results were and making changes to flags in input.
   - `2` highly verbose output. Great for finding out what happens under the hood in lazytransform pipelines.
 <p>
+To view the text pipeline, the default display is 'text', do:<br>
+
+```
+from sklearn import set_config
+set_config(display="text")
+sim.xformer
+```
+
+<p>
+To view the pipeline in a diagram (visual format), do:<br>
+
+```
+from sklearn import set_config
+set_config(display="diagram")
+sim.xformer
+# If you have a model in the pipeline, do:
+sim.modelformer
+```
+
+![lazy_pipe](lazy_pipe.png)
 
 ## Maintainers
 
@@ -151,6 +195,20 @@ PRs accepted.
 ## License
 
 Apache License 2.0 © 2020 Ram Seshadri
+
+## Note of Gratitude
+
+This libray would not have been possible without the following great libraries:
+<ol>
+<li><b>Category Encoders library:</b> Fantastic library https://contrib.scikit-learn.org/category_encoders/index.html</li>
+<li><b>Imbalanced Learn library:</b> Another fantastic library https://imbalanced-learn.org/stable/index.html</li>
+<li><b>The amazing `lazypredict`</b> was an inspiration for `lazytransform`. You can check out the library here:
+https://github.com/shankarpandala/lazypredict
+</li>
+<li><b>The amazing `Kevin Markham`</b> was another inspiration for lazytransform. You can check out his classes here:
+https://www.dataschool.io/about/
+</li>
+</ol>
 
 ## DISCLAIMER
 This project is not an official Google project. It is not supported by Google and Google specifically disclaims all warranties as to its quality, merchantability, or fitness for a particular purpose.
