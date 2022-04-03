@@ -60,6 +60,8 @@ from category_encoders import TargetEncoder, CatBoostEncoder, WOEEncoder, JamesS
 from category_encoders.glmm import GLMMEncoder
 from sklearn.preprocessing import LabelEncoder
 from category_encoders.wrapper import PolynomialWrapper
+from category_encoders.quantile_encoder import QuantileEncoder
+from category_encoders.quantile_encoder import SummaryEncoder
 from imblearn.over_sampling import SMOTE, BorderlineSMOTE, SMOTENC
 import imblearn
 from sklearn.pipeline import make_pipeline, Pipeline
@@ -727,6 +729,10 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         le = JamesSteinEncoder(drop_invariant=True)
     elif encoder == 'helmert':
         le = HelmertEncoder(drop_invariant=True)
+    elif encoder == 'quantile':
+        le = QuantileEncoder(drop_invariant=True, quantile=0.5, m=1.0)
+    elif encoder == 'summary':
+        le = SummaryEncoder(drop_invariant=True, quantiles=[0.25, 0.5, 1.0], m=1.0)        
     elif encoder == 'label':
         ### My_LabelEncoder can only work on string and category object types with NaN.
         ### My_LabelEncoder_Pipe() can work with both category and object variables 
@@ -750,19 +756,23 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         ######  Create a function called drop_second_col that drops the second unnecessary column in My_Label_Encoder
         drop_second_col_func = FunctionTransformer(drop_second_col)
         #### Now combine it with the LabelEncoder to make it run smoothly in a Pipe ##
-        lep_one = make_pipeline(lep, drop_second_col_func)
+        lep_one = Pipeline([('basic_encoder', lep), ('drop_second_column', drop_second_col_func)])
+        #lep_one = make_pipeline(lep, drop_second_col_func)
         ### lep_one uses My_LabelEncoder to first label encode and then drop the second unused column ##
     else:
-        lep_one = make_pipeline(convert_ce_to_pipe_func, be)
+        lep_one = Pipeline([('convert_CE_to_pipe', convert_ce_to_pipe_func), ('basic_encoder', be)])
+        #lep_one = make_pipeline(convert_ce_to_pipe_func, be)
     #### lep_two acts as the major encoder of discrete string variables ############
     if encoder == 'label':
         ######  Create a function called drop_second_col that drops the second unnecessary column in My_Label_Encoder
         drop_second_col_func = FunctionTransformer(drop_second_col)
         #### Now combine it with the LabelEncoder to make it run smoothly in a Pipe ##
-        lep_two = make_pipeline(lep, drop_second_col_func)
+        lep_two = Pipeline([('basic_encoder', lep), ('drop_second_column', drop_second_col_func)])
+        #lep_two = make_pipeline(lep, drop_second_col_func)
         ### lep_one uses My_LabelEncoder to first label encode and then drop the second unused column ##
     else:
-        lep_two = make_pipeline(convert_ce_to_pipe_func, le)
+        #lep_two = make_pipeline(convert_ce_to_pipe_func, le)
+        lep_two = Pipeline([('convert_CE_to_pipe', convert_ce_to_pipe_func), ('basic_encoder', le)])
     ####################################################################################
     # CREATE one_dim TRANSFORMER in order to fit between imputer and TFiDF for NLP here ###
     ####################################################################################
@@ -779,7 +789,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         #tiffd = MyTiff(strip_accents='unicode',max_features=300, min_df=0.01)
     ### create a new pipeline with filling with constant missing ##
     tsvd = TruncatedSVD(n_components=top_n, n_iter=10, random_state=3)
-    vect = make_pipeline(one_dim, tiffd, tsvd)
+    vect = Pipeline([('make_one_dim', one_dim), ('make_tfidf_pipeline', tiffd), ('truncated_svd', tsvd)])
+    #vect = make_pipeline(one_dim, tiffd, tsvd)
     ### Similarly you need to create a function that converts all NLP columns to string before feeding to CountVectorizer
     change_col_to_string_func = FunctionTransformer(change_col_to_string)
     ### we try to find the columns created by counttvectorizer ###
@@ -790,7 +801,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         colsize = vect.fit_transform(X_train[each_nlp]).shape[1]
         colsize_dict[each_nlp] = colsize
     ##### we collect the column size of each nlp variable and feed it to vect_one ##
-    vect_one = make_pipeline(change_col_to_string_func, vect)
+    #vect_one = make_pipeline(change_col_to_string_func, vect)
+    vect_one = Pipeline([('change_col_to_string', change_col_to_string_func), ('tfidf_tsvd_pipeline', vect)])
     #### Now create a function that creates time series features #########
     create_ts_features_func = FunctionTransformer(create_ts_features)
     #### we need to the same for date-vars #########
@@ -804,7 +816,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     ###### we need to create column names for one hot variables ###
     ####################################################################################
     ### these encoders result in more columns than the original - hence they are considered one hot type ###
-    onehot_type_encoders = ['helmert','bdc','hashing','hash','sum','loo','base','woe','james','target','count','glm','glmm']
+    onehot_type_encoders = ['helmert','bdc','hashing','hash','sum','loo','base','woe','james',
+                        'target','count','glm','glmm','summary']
     copy_cat_vars = copy.deepcopy(catvars)
     onehot_dict = {}
     
@@ -864,7 +877,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         print('Check the pipeline creation statement for errors (if any):\n\t%s' %full_str)
     ### Once that is done, we create sequential steps for a pipeline
     if scalers:
-        scaler_pipe = make_pipeline(ct, scaler )
+        #scaler_pipe = make_pipeline(ct, scaler )
+        scaler_pipe = Pipeline([('complete_pipeline', ct), ('scaler', scaler)])
     else:
         ### default is no scaler ##
         scaler_pipe = copy.deepcopy(ct)
@@ -895,7 +909,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     #else:
     #    nlp_pipe = Pipeline([('NLP', FunctionTransformer(create_column_names, kw_args=params))])
     #### Chain it together in the above pipeline #########
-    data_pipe = make_pipeline(scaler_pipe, nlp_pipe)
+    data_pipe = Pipeline([('scaler_pipeline', scaler_pipe), ('nlp_pipeline', nlp_pipe)])
+    #data_pipe = make_pipeline(scaler_pipe, nlp_pipe)
     #####    S A V E   P I P E L I N E  ########
     ### save the model and or pipeline here ####
     ############################################
@@ -1007,10 +1022,11 @@ class LazyTransformer():
             if y.ndim >= 2 and model_name not in ['MultiOutputClassifier','MultiOutputRegressor']:
                 print('Erroring: please ensure you input a scikit-learn MultiOutput Regressor or Classifier')
                 return self
-                ml_pipe = make_pipeline(data_pipe, self.modelformer)
+                #ml_pipe = make_pipeline(data_pipe, self.modelformer)
             else:
                 ### You don't need YTransformer if it is an sklearn model
-                ml_pipe = make_pipeline(data_pipe, self.modelformer)
+                #ml_pipe = make_pipeline(data_pipe, self.modelformer)
+                ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.modelformer)])
             ##   Now we fit the model pipeline to X and y ###
             try:
                 self.xformer = data_pipe.fit(X,y)
