@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="lazytransform",
-    version="0.27",
+    version="0.28",
     author="Ram Seshadri",
     # author_email="author@example.com",
     description="Automatically build data and model pipelines using scikit-learn in a single line of code",
@@ -13,6 +13,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     license='Apache License 2.0',
     url="https://github.com/AutoViML/lazytransform",
+    py_modules = ["lazytransform"],
     packages=setuptools.find_packages(exclude=("tests",)),
     install_requires=[
         "numpy>=1.21.5",
@@ -23,6 +24,7 @@ setuptools.setup(
         "category-encoders>=2.4.0",
         "xlrd",
     ],
+    include_package_data = True,
     classifiers=[
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",

@@ -1294,7 +1294,7 @@ def EDA_find_columns_with_infinity(df):
     return add_cols
 ####################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.27'
+version_number =  '0.28'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=False, encoders='auto', scalers=None, 
         date_to_string=False, transform_target=False, imbalanced=False)
