@@ -69,7 +69,7 @@ To install from source:
 cd <lazytransform_Destination>
 git clone git@github.com:AutoViML/lazytransform.git
 ```
-# or download and unzip https://github.com/AutoViML/lazytransform/archive/master.zip
+or download and unzip https://github.com/AutoViML/lazytransform/archive/master.zip
 ```
 conda create -n <your_env_name> python=3.7 anaconda
 conda activate <your_env_name> # ON WINDOWS: `source activate <your_env_name>`
