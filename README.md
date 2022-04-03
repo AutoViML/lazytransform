@@ -33,7 +33,7 @@ Automatically transform all categorical, date-time, NLP variables in your data s
 ### 2.  Using lazytransform as a sklearn pipeline with sklearn models or XGBoost or LightGBM models
 
 <p>The second method is a great way to create an entire data transform and model training pipeline. `lazytransform` allows you to send in a model object (only the following are supported) and it will automatically transform, create new features and train a model using sklearn pipelines. This method can be seen as follows:<br>
-<p>
+
 ![lazy_code2](lazy_code2.png)
 <p>
 The following models are currently supported:

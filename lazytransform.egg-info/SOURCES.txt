@@ -1,0 +1,7 @@
+README.md
+setup.py
+lazytransform.egg-info/PKG-INFO
+lazytransform.egg-info/SOURCES.txt
+lazytransform.egg-info/dependency_links.txt
+lazytransform.egg-info/requires.txt
+lazytransform.egg-info/top_level.txt
