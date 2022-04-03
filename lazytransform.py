@@ -1019,12 +1019,21 @@ class LazyTransformer():
                 date_to_string=self.date_to_string, verbose=self.verbose)
             ### There is no YTransformer in this pipeline so targets must be single label only ##
             model_name = str(self.modelformer).split("(")[0]            
-            if y.ndim >= 2 and model_name not in ['MultiOutputClassifier','MultiOutputRegressor']:
-                print('Erroring: please ensure you input a scikit-learn MultiOutput Regressor or Classifier')
-                return self
-                #ml_pipe = make_pipeline(data_pipe, self.modelformer)
+            if y.ndim >= 2:
+                ### In some cases, if y is a DataFrame with one column also, you get these situations.
+                if y.shape[1] == 1:
+                    ## In this case, y has only one column hence, you can use a model pipeline ##
+                    ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.modelformer)])
+                elif model_name not in ['MultiOutputClassifier','MultiOutputRegressor']:
+                    ### In this case, y has more than 1 column, hence if it is not a multioutput model, give error
+                    print('Erroring: please ensure you input a scikit-learn MultiOutput Regressor or Classifier')
+                    return self
+                else:
+                    ## In this case we have a multi output model. So let's use it ###
+                    #ml_pipe = make_pipeline(data_pipe, self.modelformer)
+                    ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.modelformer)])
             else:
-                ### You don't need YTransformer if it is an sklearn model
+                ### You don't need YTransformer since it is a simple sklearn model
                 #ml_pipe = make_pipeline(data_pipe, self.modelformer)
                 ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.modelformer)])
             ##   Now we fit the model pipeline to X and y ###
@@ -1034,7 +1043,7 @@ class LazyTransformer():
                     self.yformer = yt.fit(X,y)
                 self.modelformer = ml_pipe.fit(X,y)
             except:
-                print('Erroring: please ensure you input a scikit-learn model or XGB or LightGBM model')
+                print('Erroring: please check your input. There may be something wrong with data types or inputs.')
                 return self
             print('model pipeline fitted with %s model' %model_name)
             self.fitted = True
@@ -1158,15 +1167,16 @@ class LazyTransformer():
     def plot_importance(self, max_features=10):
         import lightgbm as lgbm
         from xgboost import plot_importance
-        if str(self.modelformer).split("(")[0] == 'LGBMClassifier' or str(self.modelformer).split("(")[0] == 'LGBMRegressor':
-            lgbm.plot_importance(self.modelformer, importance_type='gain', max_num_features=max_features)
-        elif str(self.modelformer).split("(")[0] == 'XGBClassifier' or str(self.modelformer).split("(")[0] == 'XGBRegressor':
-            plot_importance(self.modelformer, importance_type='gain', max_num_features=max_features)
-        elif str(self.modelformer).split("(")[0] == 'LogisticRegression':
+        model_name = str(self.modelformer).split("(")[-2].split(",")[-1]
+        if  model_name == ' LGBMClassifier' or model_name == ' LGBMRegressor':
+            lgbm.plot_importance(self.modelformer.named_steps['model'], importance_type='gain', max_num_features=max_features)
+        elif model_name == ' XGBClassifier' or model_name == ' XGBRegressor':
+            plot_importance(self.modelformer.named_steps['model'], importance_type='gain', max_num_features=max_features)
+        elif model_name == ' LogisticRegression':
             from sklearn.linear_model import LogisticRegression
             import math
             feature_names = self.features
-            model = self.modelformer
+            model = self.modelformer.named_steps['model']
             w0 = model.intercept_[0]
             w = model.coef_[0]
             feature_importance = pd.DataFrame(feature_names, columns = ["feature"])
@@ -1175,7 +1185,7 @@ class LazyTransformer():
             feature_importance.plot.barh(x='feature', y='importance')
         else:
             try:
-                importances = self.modelformer.feature_importances_
+                importances = model.feature_importances_
                 feature_names = self.features
                 forest_importances = pd.Series(importances, index=feature_names)
                 forest_importances.sort_values(ascending=False)[:max_features].plot(kind='barh')
@@ -1284,7 +1294,7 @@ def EDA_find_columns_with_infinity(df):
     return add_cols
 ####################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.24'
+version_number =  '0.26'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=False, encoders='auto', scalers=None, 
         date_to_string=False, transform_target=False, imbalanced=False)
