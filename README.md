@@ -84,7 +84,7 @@ You can invoke `lazytransform` as a scikit-learn compatible fit and transform or
 
 ```
 from lazytransform import LazyTransformer
-lazy = LazyTransformer(model=False, encoders='auto', scalers=None, 
+lazy = LazyTransformer(model=None, encoders='auto', scalers=None, 
         date_to_string=False, transform_target=False, imbalanced=False)
 ```
 
@@ -112,7 +112,9 @@ Once you import it, you can define the object by giving several options such as:
 
 **Arguments**
 
-- `model`: could be any scikit-learn model (including multioutput models) as well as the popular XGBoost and LightGBM libraries.
+<b>Caution:</b> X_train and y_train must be pandas Dataframes or pandas Series. DO NOT send in numpy arrays. They won't work.
+
+- `model`: default is None. Or it could be any scikit-learn model (including multioutput models) as well as the popular XGBoost and LightGBM libraries. You need to install those libraries if you want to use them.
 - `encoders`: could be one more encoders in a string or a list. Each encoder string can be any one of the 10+ encoders from `category_encoders` library below.  Available encoders are listed here as strings so that you can input them in lazytransform:
   - `auto` - It uses `onehot` encoding for low-cardinality variables and `label` encoding for high cardinality variables.
   - `onehot` - One Hot encoding - it will be used for all categorical features irrespective of cardinality
@@ -128,7 +130,7 @@ Once you import it, you can define the object by giving several options such as:
   - `target` - Target Encoding
   - `count` - Count Encoding
   - `glm`,`glmm` - Generalized Linear Model Encoding
-<br>Here is a description of various encoders and their uses from the excellent <a href="https://contrib.scikit-learn.org/category_encoders/"> category_encoders</a> python library:<br>
+- Here is a description of various encoders and their uses from the excellent <a href="https://contrib.scikit-learn.org/category_encoders/"> category_encoders</a> python library:<br>
     - `HashingEncoder`: HashingEncoder is a multivariate hashing implementation with configurable dimensionality/precision. The advantage of this encoder is that it does not maintain a dictionary of observed categories. Consequently, the encoder does not grow in size and accepts new values during data scoring by design.
     - `SumEncoder`: SumEncoder is a Sum contrast coding for the encoding of categorical features.
     - `PolynomialEncoder`: PolynomialEncoder is a Polynomial contrast coding for the encoding of categorical features.
@@ -166,7 +168,7 @@ To view the text pipeline, the default display is 'text', do:<br>
 ```
 from sklearn import set_config
 set_config(display="text")
-sim.xformer
+lazy.xformer
 ```
 
 <p>
@@ -175,12 +177,17 @@ To view the pipeline in a diagram (visual format), do:<br>
 ```
 from sklearn import set_config
 set_config(display="diagram")
-sim.xformer
+lazy.xformer
 # If you have a model in the pipeline, do:
-sim.modelformer
+lazy.modelformer
 ```
-
 ![lazy_pipe](lazy_pipe.png)
+
+To view the feature importances of the model in the pipeline, you can do:
+```
+lazy.plot_importance()
+```
+![lazy_feat_imp](lazy_feat_imp.png)
 
 ## Maintainers
 
