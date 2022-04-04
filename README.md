@@ -54,14 +54,16 @@ However, you must install and import those models on your own and define them as
 </ol>
 [Anaconda](https://docs.anaconda.com/anaconda/install/)
 <p>
-To install from PyPi:
+On your local machine, it is easy to install lazytransform from PyPi:
 
 ```
 pip install lazytransform 
 ```
-or
+But on Kaggle Notebooks, you must slightly modify the installation into two steps. If you don't do this, you will get an error!
 ```
-pip install git+https://github.com/AutoViML/lazytransform.git
+pip install lazytransform --ignore-installed --no-deps
+pip install category-encoders --ignore-installed --no-deps
+
 ```
 
 To install from source:
