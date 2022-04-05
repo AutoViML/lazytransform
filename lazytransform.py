@@ -295,7 +295,7 @@ def classify_vars_pandas(df, verbose=0):
     var_dict = defaultdict(list)
     #### To select all numeric types, use np.number or 'number'
     numvars = df.select_dtypes(include='number').columns.tolist()
-    inf_cols = EDA_find_columns_with_infinity(df)
+    inf_cols = EDA_find_remove_columns_with_infinity(df)
     numvars = left_subtract(numvars, inf_cols)
     var_dict['continuous_vars'] = numvars
     #### To select strings you must use the object dtype, but note that this will return all object dtype columns
@@ -917,8 +917,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     # save the model to disk
     filename = 'LazyTransformer_pipeline.pkl'
     difftime = max(1, int(time.time()-start_time))
-    print('    Time taken to define data pipeline = %s second(s)' %difftime)
-    print('    Data Pipeline is saved as: %s in current working directory.' %filename)
+    print('Time taken to define data pipeline = %s second(s)' %difftime)
+    print('    Data pipeline is saved as: %s in current working directory.' %filename)
     pickle.dump(data_pipe, open(filename, 'wb'))
     return data_pipe
 ######################################################################################
@@ -933,7 +933,7 @@ class MyTiff(TransformerMixin):
     def transform(self, x, y=None):
         return self.encoder.transform(x)
 ########################################################################
-import pdb
+import re
 class LazyTransformer():
     """
     #########################################################################
@@ -1006,17 +1006,19 @@ class LazyTransformer():
                 if modelformer=False, then you can do only fit_transform() and predict()
         """
         X = copy.deepcopy(X)
+        #X = X.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
         y = copy.deepcopy(y)
         self.features = X.columns.tolist()
         if self.transform_target:
             ### Non-scikit-learn models need numeric targets. 
             ### Hence YTransformer converts them before feeding model
-            yt = YTransformer()
+            yformer = YTransformer()
         #### This is where we build pipelines for X and y #############
         if self.modelformer is not None:
             ### If a model is given, then add it to pipeline and fit it ###
             data_pipe = make_simple_pipeline(X, y, encoders=self.encoders, scalers=self.scalers,
                 date_to_string=self.date_to_string, verbose=self.verbose)
+            
             ### There is no YTransformer in this pipeline so targets must be single label only ##
             model_name = str(self.modelformer).split("(")[0]            
             if y.ndim >= 2:
@@ -1040,10 +1042,14 @@ class LazyTransformer():
             try:
                 self.xformer = data_pipe.fit(X,y)
                 if self.transform_target:
-                    self.yformer = yt.fit(X,y)
-                self.modelformer = ml_pipe.fit(X,y)
-            except:
-                print('Erroring: please check your input. There may be something wrong with data types or inputs.')
+                    self.yformer = yformer.fit(X,y)
+                    yt = self.yformer.transform(X, y)
+                    self.modelformer = ml_pipe.fit(X,yt)
+                else:
+                    self.yformer = yformer.fit(X,y)
+                    self.modelformer = ml_pipe.fit(X,y)
+            except Exception as e:
+                print('Erroring due to %s: There may be something wrong with your data types or inputs.' %e)
                 return self
             print('model pipeline fitted with %s model' %model_name)
             self.fitted = True
@@ -1056,8 +1062,12 @@ class LazyTransformer():
             print('X and y Transformer Pipeline created...')
             self.fitted = True
             if self.transform_target:
-                self.yformer = yt.fit(X,y)
-            self.xformer = data_pipe.fit(X,y)
+                self.yformer = yformer.fit(X,y)
+                yt = self.yformer.transform(X, y)
+                self.xformer = data_pipe.fit(X,yt)
+            else:
+                self.yformer = yformer.fit(X,y)
+                self.xformer = data_pipe.fit(X,y)
             ## we will leave self.modelformer as None ##
         ### print imbalanced ###
         if self.imbalanced_flag:
@@ -1093,7 +1103,6 @@ class LazyTransformer():
         y = copy.deepcopy(y)
         X_index = X.index
         start_time = time.time()
-        
         if y is None and self.fitted:
             X_enc = self.xformer.transform(X)
             X_enc.index = X_index
@@ -1109,7 +1118,7 @@ class LazyTransformer():
             return X, y
         elif y is not None and self.fitted and self.modelformer is None:
             if self.transform_target:
-                _, y_enc = self.yformer.transform(X, y)
+                y_enc = self.yformer.transform(X, y)
             else:
                 y_enc = y
             X_enc = self.xformer.transform(X)
@@ -1140,18 +1149,17 @@ class LazyTransformer():
         X_trans =  xt.transform(X)
         X_trans.index = X_index
         if self.transform_target:
-            yt = self.yformer
-            _, y_trans = yt.transform(X,y)
+            y_trans = self.yformer.transform(X,y)
         else:
             y_trans = y
+        #### Now we need to check if imbalanced flag is set ###
         if self.imbalanced_first_done and self.imbalanced_flag:
-            #sm = SMOTE(sampling_strategy='auto')
             pass
         elif not self.imbalanced_first_done and self.imbalanced_flag:
             sm = self.smotex
             if verbose:
                 print('Imbalanced flag set. Using SMOTE to transform X and y...')
-            X_enc, y_enc = sm.fit_resample(X_enc, y_enc)
+            X_trans, y_trans = sm.fit_resample(X_trans, y_trans)
             self.imbalanced_first_done = True
             self.smotex = sm
             print('    SMOTE transformed data in pipeline. Dont forget to use transformed X and y from output.')
@@ -1226,6 +1234,7 @@ class YTransformer():
         return self
     
     def transform(self, X, y=None):
+        
         for i, each_target in enumerate(self.targets):
             if y is None:
                 return X, y
@@ -1239,7 +1248,7 @@ class YTransformer():
                     y_t = self.transformers[each_target].transform(y.iloc[:,i])
                     y_trans = pd.DataFrame(y_trans)
                     y_trans[each_target] = y_t
-                return X, y_trans
+                return y_trans
     
     def fit_transform(self, X, y=None):
         ### Since X for yT in a pipeline is sent as X, we need to switch X and y this way ##
@@ -1266,43 +1275,43 @@ class YTransformer():
                 y_t = transformer_.inverse_transform(y.values[:,i])
                 y_trans = pd.DataFrame(y_trans)
                 y_trans[each_target] = y_t
-        return X, y_trans
+        return y_trans
     
     def predict(self, X, y=None, **fit_params):
         print('There is no predict function in Label Encoder. Returning...')
         return self
 ##############################################################################
-def EDA_find_columns_with_infinity(df):
+import copy
+def EDA_find_remove_columns_with_infinity(df, remove=False):
     """
     This function finds all columns in a dataframe that have inifinite values (np.inf or -np.inf)
     It returns a list of column names. If the list is empty, it means no columns were found.
+    If remove flag is set, then it returns a smaller dataframe with inf columns removed.
     """
-    add_cols = []
-    sum_cols = 0
-    for col in df.columns:
-        inf_sum1 = 0 
-        inf_sum2 = 0
-        inf_sum1 = len(df[df[col]==np.inf])
-        inf_sum2 = len(df[df[col]==-np.inf])
-        if (inf_sum1 > 0) or (inf_sum2 > 0):
-            add_cols.append(col)
-            sum_cols += inf_sum1
-            sum_cols += inf_sum2
-    if sum_cols > 0:
-        print('    there are %d rows and %d columns with infinity in them...' %(sum_cols,len(add_cols)))
-        print("    after removing columns with infinity, shape of dataset = (%d, %d)" %(df.shape[0],(df.shape[1]-len(add_cols))))
-    return add_cols
+    nums = df.select_dtypes(include='number').columns.tolist()
+    dfx = df[nums]
+    sum_rows = np.isinf(dfx).values.sum()
+    add_cols =  list(dfx.columns.to_series()[np.isinf(dfx).any()])
+    if sum_rows > 0:
+        print('    there are %d rows and %d columns with infinity in them...' %(sum_rows,len(add_cols)))
+        if remove:
+            ### here you need to use df since the whole dataset is involved ###
+            nocols = [x for x in df.columns if x not in add_cols]
+            print("    after removing columns with infinity, shape of dataset = (%s, %s)" %(df.shape,(df[nocols].shape,)))
+            return df[nocols]
+    else:
+        return add_cols
 ####################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.28'
+version_number =  '0.29'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=False, encoders='auto', scalers=None, 
         date_to_string=False, transform_target=False, imbalanced=False)
     ### if you are not using a model in pipeline, you must use fit and transform ##
-    X_trainm, y_trainm = lazy.fit_transform(X_train, y_train)
-    X_testm = lazy.transform(X_test)
+        X_trainm, y_trainm = lazy.fit_transform(X_train, y_train)
+        X_testm = lazy.transform(X_test)
     ### If using a model in pipeline, use fit and predict only ###
-    lazy.fit(X_train, y_train)
-    lazy.predict(X_test)
+        lazy.fit(X_train, y_train)
+        lazy.predict(X_test)
 """)
 #################################################################################
