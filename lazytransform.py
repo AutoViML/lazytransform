@@ -397,7 +397,20 @@ def create_column_names(Xt, nlpvars=[], catvars=[], numvars=[],datevars=[], oneh
     else:
         ### Xt is already a dense array, no need to convert it ##
         return pd.DataFrame(Xt, columns = cols_names)
-
+#############################################################################################################
+import random
+import collections
+random.seed(10)
+def make_unique_columns(cols):
+    ser = pd.Series(cols)
+    ### This function removes all special chars from a list ###
+    remove_special_chars =  lambda x:re.sub('[^A-Za-z0-9_]+', '', x)
+    newls = ser.map(remove_special_chars).values.tolist()
+    ### there may be duplicates in this list - we need to make them unique by randomly adding strings to name ##
+    seen = [item for item, count in collections.Counter(newls).items() if count > 1]
+    cols = [x+str(random.randint(1,1000)) if x in seen else x for x in newls]
+    return cols
+#############################################################################################################
 def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], numvars=[],datevars=[], onehot_dict={},
                         colsize_dict={}, datesize_dict={}):
     ### This names all the features created by the NLP column. Hence col number=1 and axis=1 ###
@@ -408,7 +421,8 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], numv
         categs = onehot_dict[each_cat]
         x_cols = [each_cat+'_'+str(categs[i]) for i in range(len(categs))]
         cols_cat += x_cols
-    
+    cols_cat = make_unique_columns(cols_cat)
+
     cols_discrete = []
     for each_discrete in discretevars:
         ### for anything other than one-hot we should just use label encoding to make it simpler ##
@@ -419,7 +433,8 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], numv
         except:
             ### if there is no new var to be created, just use the existing discrete vars itself ###
             cols_discrete.append(each_discrete)
-    
+    cols_discrete = make_unique_columns(cols_discrete)
+
     cols_nlp = []
     for each_nlp in nlpvars:
         colsize = colsize_dict[each_nlp]
@@ -1046,7 +1061,6 @@ class LazyTransformer():
                     yt = self.yformer.transform(X, y)
                     self.modelformer = ml_pipe.fit(X,yt)
                 else:
-                    self.yformer = yformer.fit(X,y)
                     self.modelformer = ml_pipe.fit(X,y)
             except Exception as e:
                 print('Erroring due to %s: There may be something wrong with your data types or inputs.' %e)
@@ -1066,7 +1080,6 @@ class LazyTransformer():
                 yt = self.yformer.transform(X, y)
                 self.xformer = data_pipe.fit(X,yt)
             else:
-                self.yformer = yformer.fit(X,y)
                 self.xformer = data_pipe.fit(X,y)
             ## we will leave self.modelformer as None ##
         ### print imbalanced ###
@@ -1145,8 +1158,7 @@ class LazyTransformer():
         X_index = X.index
         start_time = time.time()
         self.fit(X,y)
-        xt = self.xformer
-        X_trans =  xt.transform(X)
+        X_trans =  self.xformer.transform(X)
         X_trans.index = X_index
         if self.transform_target:
             y_trans = self.yformer.transform(X,y)
@@ -1297,15 +1309,19 @@ def EDA_find_remove_columns_with_infinity(df, remove=False):
         if remove:
             ### here you need to use df since the whole dataset is involved ###
             nocols = [x for x in df.columns if x not in add_cols]
-            print("    after removing columns with infinity, shape of dataset = (%s, %s)" %(df.shape,(df[nocols].shape,)))
+            print("    Shape of dataset before %s and after %s removing columns with infinity" %(df.shape,(df[nocols].shape,)))
             return df[nocols]
+        else:
+            ## this will be a list of columns with infinity ####
+            return add_cols
     else:
+        ## this will be an empty list if there are no columns with infinity
         return add_cols
 ####################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.29'
+version_number =  '0.30'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
-    lazy = LazyTransformer(model=False, encoders='auto', scalers=None, 
+    lazy = LazyTransformer(model=None, encoders='auto', scalers=None, 
         date_to_string=False, transform_target=False, imbalanced=False)
     ### if you are not using a model in pipeline, you must use fit and transform ##
         X_trainm, y_trainm = lazy.fit_transform(X_train, y_train)
