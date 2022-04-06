@@ -1246,8 +1246,8 @@ class LazyTransformer(TransformerMixin):
         You can use this new pipeline to predict on existing or new datasets.
 
         """
+
         start_time = time.time()
-        
         if len(params) == 0 and not multi_label:
             rand_params = {
                 'model__learning_rate': [0.001, 0.01, 0.1, 0.3, 0.5],
@@ -1436,7 +1436,7 @@ def EDA_find_remove_columns_with_infinity(df, remove=False):
         ## this will be an empty list if there are no columns with infinity
         return add_cols
 ####################################################################################
-import lightgbm as lgbm
+
 from sklearn.metrics import mean_squared_log_error, mean_squared_error,balanced_accuracy_score
 from scipy import stats
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
@@ -1462,7 +1462,7 @@ def check_if_GPU_exists():
 
 ###############################################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.31'
+version_number =  '0.32'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, 
         date_to_string=False, transform_target=False, imbalanced=False)
