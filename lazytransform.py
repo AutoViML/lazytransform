@@ -42,15 +42,18 @@ import pdb
 from collections import defaultdict
 ### These imports give fit_transform method for free ###
 from sklearn.base import BaseEstimator, TransformerMixin 
+from sklearn.utils.validation import column_or_1d
+from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.preprocessing import MaxAbsScaler, StandardScaler, MinMaxScaler
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.decomposition import TruncatedSVD
+##############  These imports are to make trouble shooting easier #####
 import copy
 import pickle
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 import scipy
 import warnings
 warnings.filterwarnings("ignore")
-from sklearn.decomposition import TruncatedSVD
 ##########################################################
 from category_encoders import HashingEncoder, PolynomialEncoder, BackwardDifferenceEncoder
 from category_encoders.sum_coding import SumEncoder
@@ -627,7 +630,7 @@ class Make2D:
             np.expand_dims(X, axis=1)).ravel()
 ##################################################################################
 def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='', 
-            date_to_string=False, verbose=0):
+            date_to_string=False, save_flag=False, verbose=0):
     """
     ######################################################################################################################
     # # This is the SIMPLEST best pipeline for NLP and Time Series problems - Created by Ram Seshadri
@@ -929,12 +932,13 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     #####    S A V E   P I P E L I N E  ########
     ### save the model and or pipeline here ####
     ############################################
-    # save the model to disk
-    filename = 'LazyTransformer_pipeline.pkl'
+    # save the model to disk only if save flag is set to True ##
+    if save_flag:
+        filename = 'LazyTransformer_pipeline.pkl'
+        print('    Data pipeline is saved as: %s in current working directory.' %filename)
+        pickle.dump(data_pipe, open(filename, 'wb'))
     difftime = max(1, int(time.time()-start_time))
     print('Time taken to define data pipeline = %s second(s)' %difftime)
-    print('    Data pipeline is saved as: %s in current working directory.' %filename)
-    pickle.dump(data_pipe, open(filename, 'wb'))
     return data_pipe
 ######################################################################################
 #gives fit_transform method for free
@@ -949,7 +953,7 @@ class MyTiff(TransformerMixin):
         return self.encoder.transform(x)
 ########################################################################
 import re
-class LazyTransformer():
+class LazyTransformer(TransformerMixin):
     """
     #########################################################################
         #             LazyTransformer                          #
@@ -980,7 +984,7 @@ class LazyTransformer():
     y : pandas Series or DataFrame
     """
     def __init__(self, model=None, encoders='auto', scalers=None, date_to_string=False, 
-                    transform_target=False, imbalanced=False, verbose=0):
+                    transform_target=False, imbalanced=False, save=False, verbose=0):
         """
         Description of __init__
 
@@ -993,19 +997,25 @@ class LazyTransformer():
         self.date_to_string = date_to_string
         self.encoders = encoders
         self.scalers = scalers
-        self.xformer = None
-        self.yformer = None
-        self.fitted = False
-        self.imbalanced_first_done = False
-        self.features = []
-        self.imbalanced_flag = imbalanced
-        self.smotex = None
+        self.imbalanced = imbalanced
         self.verbose = verbose
-        if model is not None:
-            self.modelformer = model
-        else:
-            self.modelformer = None
+        self.model = model
         self.transform_target = transform_target
+        self.fitted = False
+        self.save = save
+
+    def get_params(self, deep=True):
+        # This is to make it scikit-learn compatible ####
+        return {"date_to_string": self.date_to_string, "encoders": self.encoders,
+            "scalers": self.scalers, "imbalanced": self.imbalanced, 
+            "verbose": self.verbose, "transform_target": self.transform_target,
+            "model": self.model}
+
+    def set_params(self, **parameters):
+        for parameter, value in parameters.items():
+            setattr(self, parameter, value)
+        return self
+
 
     def fit(self, X: pd.DataFrame, y: pd.DataFrame):
         """
@@ -1020,48 +1030,51 @@ class LazyTransformer():
                 if modelformer=True, then you can do fit() and predict() with model
                 if modelformer=False, then you can do only fit_transform() and predict()
         """
+        self.xformer = None
+        self.yformer = None
+        self.imbalanced_first_done = False
+        self.smotex = None
         X = copy.deepcopy(X)
         #X = X.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
         y = copy.deepcopy(y)
-        self.features = X.columns.tolist()
         if self.transform_target:
             ### Non-scikit-learn models need numeric targets. 
             ### Hence YTransformer converts them before feeding model
             yformer = YTransformer()
         #### This is where we build pipelines for X and y #############
-        if self.modelformer is not None:
+        if self.model is not None:
             ### If a model is given, then add it to pipeline and fit it ###
             data_pipe = make_simple_pipeline(X, y, encoders=self.encoders, scalers=self.scalers,
-                date_to_string=self.date_to_string, verbose=self.verbose)
+                date_to_string=self.date_to_string, save_flag = self.save, verbose=self.verbose)
             
             ### There is no YTransformer in this pipeline so targets must be single label only ##
-            model_name = str(self.modelformer).split("(")[0]            
+            model_name = str(self.model).split("(")[0]            
             if y.ndim >= 2:
                 ### In some cases, if y is a DataFrame with one column also, you get these situations.
                 if y.shape[1] == 1:
                     ## In this case, y has only one column hence, you can use a model pipeline ##
-                    ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.modelformer)])
+                    ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
                 elif model_name not in ['MultiOutputClassifier','MultiOutputRegressor']:
                     ### In this case, y has more than 1 column, hence if it is not a multioutput model, give error
                     print('Erroring: please ensure you input a scikit-learn MultiOutput Regressor or Classifier')
                     return self
                 else:
                     ## In this case we have a multi output model. So let's use it ###
-                    #ml_pipe = make_pipeline(data_pipe, self.modelformer)
-                    ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.modelformer)])
+                    #ml_pipe = make_pipeline(data_pipe, self.model)
+                    ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
             else:
                 ### You don't need YTransformer since it is a simple sklearn model
-                #ml_pipe = make_pipeline(data_pipe, self.modelformer)
-                ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.modelformer)])
+                #ml_pipe = make_pipeline(data_pipe, self.model)
+                ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
             ##   Now we fit the model pipeline to X and y ###
             try:
                 self.xformer = data_pipe.fit(X,y)
                 if self.transform_target:
                     self.yformer = yformer.fit(X,y)
                     yt = self.yformer.transform(X, y)
-                    self.modelformer = ml_pipe.fit(X,yt)
+                    self.model = ml_pipe.fit(X,yt)
                 else:
-                    self.modelformer = ml_pipe.fit(X,y)
+                    self.model = ml_pipe.fit(X,y)
             except Exception as e:
                 print('Erroring due to %s: There may be something wrong with your data types or inputs.' %e)
                 return self
@@ -1070,7 +1083,7 @@ class LazyTransformer():
         else:
             ### if there is no given model, just use the data_pipeline ##
             data_pipe = make_simple_pipeline(X, y, encoders=self.encoders, scalers=self.scalers,
-                date_to_string=self.date_to_string, verbose=self.verbose)
+                date_to_string=self.date_to_string, save_flag = self.save, verbose=self.verbose)
             print('No model input given...')
             #### here we check if we should add a model to the pipeline 
             print('X and y Transformer Pipeline created...')
@@ -1081,9 +1094,9 @@ class LazyTransformer():
                 self.xformer = data_pipe.fit(X,yt)
             else:
                 self.xformer = data_pipe.fit(X,y)
-            ## we will leave self.modelformer as None ##
+            ## we will leave self.model as None ##
         ### print imbalanced ###
-        if self.imbalanced_flag:
+        if self.imbalanced:
             #### This is where we do SMOTE #######################
             if isinstance(X, pd.DataFrame):
                 var_classes = classify_vars_pandas(X)
@@ -1104,8 +1117,8 @@ class LazyTransformer():
         return self
 
     def predict(self, X, y=None):
-        if self.fitted and self.modelformer is not None:
-            y_enc = self.modelformer.predict(X)
+        if self.fitted and self.model is not None:
+            y_enc = self.model.predict(X)
             return y_enc
         else:
             print('Model not fitted or model not provided. Please check your inputs and try again')
@@ -1123,13 +1136,13 @@ class LazyTransformer():
             difftime = max(1, int(time.time()-start_time))
             print('    Time taken to transform dataset = %s second(s)' %difftime)
             return X_enc
-        elif self.fitted and self.modelformer is not None:
+        elif self.fitted and self.model is not None:
             print('Error: No transform allowed. You must use fit and predict when using a pipeline with a model.')
             return X, y
         elif not self.fitted:
             print('LazyTransformer has not been fit yet. Fit it first and try again.')
             return X, y
-        elif y is not None and self.fitted and self.modelformer is None:
+        elif y is not None and self.fitted and self.model is None:
             if self.transform_target:
                 y_enc = self.yformer.transform(X, y)
             else:
@@ -1137,9 +1150,9 @@ class LazyTransformer():
             X_enc = self.xformer.transform(X)
             X_enc.index = X_index
             #### Now check if the imbalanced_flag is True, then apply SMOTE using borderline2 algorithm which works better
-            if self.imbalanced_first_done and self.imbalanced_flag:
+            if self.imbalanced_first_done and self.imbalanced:
                 pass
-            elif not self.imbalanced_first_done and self.imbalanced_flag:
+            elif not self.imbalanced_first_done and self.imbalanced:
                 sm = self.smotex
                 X_enc, y_enc = sm.fit_resample(X_enc, y_enc)
                 self.imbalanced_first_done = True
@@ -1165,9 +1178,9 @@ class LazyTransformer():
         else:
             y_trans = y
         #### Now we need to check if imbalanced flag is set ###
-        if self.imbalanced_first_done and self.imbalanced_flag:
+        if self.imbalanced_first_done and self.imbalanced:
             pass
-        elif not self.imbalanced_first_done and self.imbalanced_flag:
+        elif not self.imbalanced_first_done and self.imbalanced:
             sm = self.smotex
             if verbose:
                 print('Imbalanced flag set. Using SMOTE to transform X and y...')
@@ -1187,16 +1200,16 @@ class LazyTransformer():
     def plot_importance(self, max_features=10):
         import lightgbm as lgbm
         from xgboost import plot_importance
-        model_name = str(self.modelformer).split("(")[-2].split(",")[-1]
+        model_name = str(self.model).split("(")[-2].split(",")[-1]
         if  model_name == ' LGBMClassifier' or model_name == ' LGBMRegressor':
-            lgbm.plot_importance(self.modelformer.named_steps['model'], importance_type='gain', max_num_features=max_features)
+            lgbm.plot_importance(self.model.named_steps['model'], importance_type='gain', max_num_features=max_features)
         elif model_name == ' XGBClassifier' or model_name == ' XGBRegressor':
-            plot_importance(self.modelformer.named_steps['model'], importance_type='gain', max_num_features=max_features)
+            plot_importance(self.model.named_steps['model'], importance_type='gain', max_num_features=max_features)
         elif model_name == ' LogisticRegression':
             from sklearn.linear_model import LogisticRegression
             import math
-            feature_names = self.features
-            model = self.modelformer.named_steps['model']
+            feature_names = self.model.named_steps['model'].feature_names_in_
+            model = self.model.named_steps['model']
             w0 = model.intercept_[0]
             w = model.coef_[0]
             feature_importance = pd.DataFrame(feature_names, columns = ["feature"])
@@ -1204,34 +1217,139 @@ class LazyTransformer():
             feature_importance = feature_importance.sort_values(by = ["importance"], ascending=False)[:max_features]
             feature_importance.plot.barh(x='feature', y='importance')
         else:
+            ### These are for RandomForestClassifier kind of scikit-learn models ###
             try:
                 importances = model.feature_importances_
-                feature_names = self.features
+                feature_names = self.model.named_steps['model'].feature_names_in_
                 forest_importances = pd.Series(importances, index=feature_names)
                 forest_importances.sort_values(ascending=False)[:max_features].plot(kind='barh')
             except:
                 print('Could not plot feature importances. Please check your model and try again.')
-####################################################################################
-from sklearn.utils.validation import column_or_1d
-#TransformerMixin, BaseEstimator
-class YTransformer():
-    def __init__(self):
-        self.transformers =  {}
-        self.targets = []
+
+    def lightgbm_grid_search(self, X_train, y_train, modeltype,
+                             params={}, grid_search=False, multi_label=False,
+                             log_y=False, gpu_flag=False):
+        """
+        Perform GridSearchCV or RandomizedSearchCV using LightGBM based LazyTransformer pipeline.
+        -- Remember that you can only use LightGBM scikit-learn syntax based models here. 
+        Optionally you can provide parameters to search (as a dictionary) in the following format:
+                params = {
+                'model__learning_rate': [0.001, 0.01, 0.1, 0.3, 0.5],
+                'model__num_leaves': [20,30,40,50],
+                        }
+            You can use any LightGBM parameter you want in addition to the above. Please check syntax.
+        You can also provide multi_label as True to enable MultiOutputRegressor or MultiOutputClassifier
+           to be used as a wrapper around the LightGBM object. The params will be passed to the 
+           multioutput estimator which will in turn pass them on to the LGBM estimators during fit.
+
+        This function returns a new LazyTransformer pipeline that contains the best model trained on that dataset.
+        You can use this new pipeline to predict on existing or new datasets.
+
+        """
+        start_time = time.time()
         
-    def fit(self, X, y):
-        """Fit the model according to the given training data"""
+        if len(params) == 0 and not multi_label:
+            rand_params = {
+                'model__learning_rate': [0.001, 0.01, 0.1, 0.3, 0.5],
+                'model__num_leaves': [20,30,40,50],
+                'model__n_estimators': [100,150,200,250],
+                'model__class_weight':[None, 'balanced'],
+                    }
+            grid_params = {
+                'model__learning_rate': [0.001, 0.01, 0.1],
+                'model__n_estimators': [150,200,250],
+                'model__class_weight':[None, 'balanced'],
+                    }
+
+        else:
+            if grid_search:
+                grid_params = copy.deepcopy(params)
+            else:
+                rand_params = copy.deepcopy(params)
+                
+        ########   Now let's perform randomized search to find best hyper parameters ######
+        if modeltype == 'Regression':
+            scoring = 'neg_mean_squared_error'
+            score_name = 'MSE'
+        else:
+            if grid_search:
+                scoring = 'precision'
+                score_name = 'precision'
+            else:
+                scoring = 'recall'
+                score_name = 'recall'
+
+        #### This is where you grid search the pipeline now ##############
+        if grid_search:
+            search = GridSearchCV(
+                    self, 
+                    grid_params, 
+                    cv=3,
+                    scoring=scoring,
+                    refit=True,
+                    return_train_score = True,
+                    n_jobs=-1,
+                    verbose=True,
+                    )
+        else:
+            search = RandomizedSearchCV(
+                    self,
+                    rand_params,
+                    n_iter = 10,
+                    cv = 3,
+                    refit=True,
+                    return_train_score = True,
+                    random_state = 99,
+                    scoring=scoring,
+                    n_jobs=-1,
+                    verbose=True,
+                    )
+        
+        ##### This is where we search for hyper params for model #######
+        search.fit(X_train, y_train)
+        
+        cv_results = pd.DataFrame(search.cv_results_)
+        if modeltype == 'Regression':
+            print('Mean cross-validated train %s = %0.04f' %(score_name, np.sqrt(abs(cv_results['mean_train_score'].mean()))))
+            print('    Mean cross-validated test %s = %0.04f' %(score_name, np.sqrt(abs(cv_results['mean_test_score'].mean()))))
+        else:
+            print('Mean cross-validated train %s = %0.04f' %(score_name, cv_results['mean_train_score'].mean()))
+            print('    Mean cross-validated test %s = %0.04f' %(score_name, cv_results['mean_test_score'].mean()))
+            
+        print('Time taken for Hyper Param tuning of LGBM (in minutes) = %0.1f' %(
+                                        (time.time()-start_time)/60))
+        print('Best params from search:\n%s' %search.best_params_)
+        newpipe = search.best_estimator_.model.set_params(**search.best_params_)
+        print('Returning a new LazyTransformer pipeline that contains the best model trained on your train dataset!')
+        return newpipe
+####################################################################################
+#TransformerMixin, BaseEstimator
+class YTransformer(BaseEstimator, ClassifierMixin):
+    def __init__(self, transformers={}, targets=[]):
         # store the number of dimension of the target to predict an array of
         # similar shape at predict
-        self.transformers =  {}
-        self.targets = []
+        self.transformers =  transformers
+        self.targets = targets
         
+    def get_params(self, deep=True):
+        # This is to make it scikit-learn compatible ####
+        return {"transformers": self.transformers, "targets": self.targets}
+
+    def set_params(self, **parameters):
+        for parameter, value in parameters.items():
+            setattr(self, parameter, value)
+        return self
+
+    def fit(self, X, y):
+        """Fit the model according to the given training data"""        
         # transformers are designed to modify X which is 2d dimensional, we
         # need to modify y accordingly.
         if isinstance(y, pd.Series):
-            self.targets.append(y.name)
+            if y.name not in self.targets:
+                self.targets.append(y.name)
         elif isinstance(y, pd.DataFrame):
             self.targets += y.columns.tolist()
+            self.targets = find_remove_duplicates(self.targets)
         # transform y and convert back to 1d array if needed
         if isinstance(y, pd.Series):
             y_1d = y.values
@@ -1246,7 +1364,6 @@ class YTransformer():
         return self
     
     def transform(self, X, y=None):
-        
         for i, each_target in enumerate(self.targets):
             if y is None:
                 return X, y
@@ -1264,9 +1381,9 @@ class YTransformer():
     
     def fit_transform(self, X, y=None):
         ### Since X for yT in a pipeline is sent as X, we need to switch X and y this way ##
-        self.fit(y, X)
+        self.fit(X, y)
         for each_target in self.targets:
-            y_trans =  self.transformers[each_target].transform(X)
+            y_trans =  self.transformers[each_target].transform(X, y)
         return y_trans
     
     def inverse_transform(self, X, y=None):
@@ -1290,8 +1407,9 @@ class YTransformer():
         return y_trans
     
     def predict(self, X, y=None, **fit_params):
-        print('There is no predict function in Label Encoder. Returning...')
-        return self
+        #print('There is no predict function in Label Encoder. Returning...')
+        return y
+
 ##############################################################################
 import copy
 def EDA_find_remove_columns_with_infinity(df, remove=False):
@@ -1318,8 +1436,33 @@ def EDA_find_remove_columns_with_infinity(df, remove=False):
         ## this will be an empty list if there are no columns with infinity
         return add_cols
 ####################################################################################
+import lightgbm as lgbm
+from sklearn.metrics import mean_squared_log_error, mean_squared_error,balanced_accuracy_score
+from scipy import stats
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+import scipy as sp
+import time
+import copy
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from collections import Counter, defaultdict
+import pdb
+from tqdm.notebook import tqdm
+from pathlib import Path
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+
+import os
+def check_if_GPU_exists():
+    try:
+        os.environ['NVIDIA_VISIBLE_DEVICES']
+        print('GPU active on this device')
+        return True
+    except:
+        print('No GPU active on this device')
+        return False
+
+###############################################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.30'
+version_number =  '0.31'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, 
         date_to_string=False, transform_target=False, imbalanced=False)

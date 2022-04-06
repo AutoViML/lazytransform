@@ -21,7 +21,7 @@ Automatically transform all categorical, date-time, NLP variables in your data s
 
 
 ## How to use lazytransform
-`lazytransform` can be used in one or two ways. Both are explained below.
+`lazytransform` can be used in many ways. Let us look at each of them below.
 
 ### 1.  Using lazytransform as a simple pandas data transformation pipeline 
 
@@ -34,6 +34,12 @@ Automatically transform all categorical, date-time, NLP variables in your data s
 <p>The second method is a great way to create an entire data transform and model training pipeline. `lazytransform` allows you to send in a model object (only the following are supported) and it will automatically transform, create new features and train a model using sklearn pipelines. This method can be seen as follows:<br>
 
 ![lazy_code2](lazy_code2.png)
+
+### 3.  Using lazytransform in GridSearchCV to find the best model pipeline
+<p>The third method is a great way to find the best data transformation and model training pipeline using GridSearchCV or RandomizedSearchCV along with a LightGBM or XGBoost or scikit-learn model. This is explained very clearly in the `LazyTransformer_with_GridSearch_Pipeline.ipynb` notebook in the same github here. Make sure you check it out!
+
+![lazy_gridsearch](lazy_gridsearch.png)
+
 <p>
 The following models are currently supported:
 <ol>
