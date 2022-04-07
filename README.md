@@ -1,7 +1,7 @@
 # lazytransform
 Automatically transform all categorical, date-time, NLP variables in your data set to numeric in a single line of code for any data set any size.
 
-![banner](lazy_logo5.png)
+<a href="https://ibb.co/JpnTdC1"><img src="https://i.ibb.co/09qLXQ7/lazy-logo5.png" alt="lazy-logo5" border="0"></a>
 
 # Table of Contents
 <ul>
@@ -27,18 +27,18 @@ Automatically transform all categorical, date-time, NLP variables in your data s
 
 <p>The first method is probably the most popular way to use lazytransform. The transformer within lazytransform can be used to transform and create new features from categorical, date-time and NLP (text) features in your dataset. This transformer pipeline is fully scikit-learn Pipeline compatible and can be used to build even more complex pipelines by you based on `make_pipeline` statement from `sklearn.pipeline` library. <a href="https://github.com/AutoViML/lazytransform/blob/main/Featurewiz_LazyTransform_Demo1.ipynb">Let us see an example</a>:<p>
 
-![lazy_code1](lazy_code1.png)
+<a href="https://ibb.co/xfMQnNz"><img src="https://i.ibb.co/ZYhCQ0c/lazy-code1.png" alt="lazy-code1" border="0"></a>
 
 ### 2.  Using lazytransform as a sklearn pipeline with sklearn models or XGBoost or LightGBM models
 
 <p>The second method is a great way to create an entire data transform and model training pipeline. `lazytransform` allows you to send in a model object (only the following are supported) and it will automatically transform, create new features and train a model using sklearn pipelines. <a href="https://github.com/AutoViML/lazytransform/blob/main/Featurewiz_LazyTransform_Demo2.ipynb">This method can be seen as follows</a>:<br>
 
-![lazy_code2](lazy_code2.png)
+<a href="https://ibb.co/T1WNhzT"><img src="https://i.ibb.co/0KszJPX/lazy-code2.png" alt="lazy-code2" border="0"></a>
 
 ### 3.  Using lazytransform in GridSearchCV to find the best model pipeline
 <p>The third method is a great way to find the best data transformation and model training pipeline using GridSearchCV or RandomizedSearchCV along with a LightGBM or XGBoost or scikit-learn model. This is explained very clearly in the <a href="https://github.com/AutoViML/lazytransform/blob/main/LazyTransformer_with_GridSearch_Pipeline.ipynb">LazyTransformer_with_GridSearch_Pipeline.ipynb</a> notebook in the same github here. Make sure you check it out!
 
-![lazy_gridsearch](lazy_gridsearch.png)
+<a href="https://ibb.co/WGvnqjs"><img src="https://i.ibb.co/xXqhPd3/lazy-gridsearch.png" alt="lazy-gridsearch" border="0"></a><br />
 
 <p>
 The following models are currently supported:
@@ -189,13 +189,13 @@ lazy.xformer
 # If you have a model in the pipeline, do:
 lazy.modelformer
 ```
-![lazy_pipe](lazy_pipe.png)
+<a href="https://imgbb.com/"><img src="https://i.ibb.co/Bn7V4px/lazy-pipe.png" alt="lazy-pipe" border="0"></a>
 
 To view the feature importances of the model in the pipeline, you can do:
 ```
 lazy.plot_importance()
 ```
-![lazy_feat_imp](lazy_feat_imp.png)
+<a href="https://ibb.co/jhpsVtJ"><img src="https://i.ibb.co/cJmVbqY/lazy-feat-imp.png" alt="lazy-feat-imp" border="0"></a>
 
 ## Maintainers
 

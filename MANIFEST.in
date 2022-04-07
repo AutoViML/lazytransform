@@ -22,5 +22,7 @@ include lazy_pipe.png
 include lazytransform.py
 include lazytransformer_kaggle_demo.ipynb
 
+recursive-exclude notebooks *
+recursive-exclude images *
 
 exclude .gitignore
