@@ -17,12 +17,13 @@ setuptools.setup(
     packages=setuptools.find_packages(exclude=("tests",)),
     install_requires=[
         "numpy>=1.21.5",
-        "pandas==1.3.5",
+        "pandas>=1.3.5",
         "matplotlib",
         "scikit-learn>=0.24.2",
         "imbalanced-learn>=0.7",
         "category-encoders>=2.4.0",
         "xlrd",
+        "tqdm",
     ],
     include_package_data = True,
     classifiers=[
