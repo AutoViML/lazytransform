@@ -58,7 +58,7 @@ warnings.filterwarnings("ignore")
 from category_encoders import HashingEncoder, PolynomialEncoder, BackwardDifferenceEncoder
 from category_encoders.sum_coding import SumEncoder
 from category_encoders.leave_one_out import LeaveOneOutEncoder
-from category_encoders import OneHotEncoder, HelmertEncoder, OrdinalEncoder, CountEncoder, BaseNEncoder
+from category_encoders import HelmertEncoder, OrdinalEncoder, CountEncoder, BaseNEncoder
 from category_encoders import TargetEncoder, CatBoostEncoder, WOEEncoder, JamesSteinEncoder
 from category_encoders.glmm import GLMMEncoder
 from sklearn.preprocessing import LabelEncoder
@@ -68,6 +68,7 @@ from category_encoders.quantile_encoder import SummaryEncoder
 from imblearn.over_sampling import SMOTE, BorderlineSMOTE, SMOTENC
 import imblearn
 from sklearn.pipeline import make_pipeline, Pipeline
+from sklearn.preprocessing import OneHotEncoder
 #########################################################
 class My_LabelEncoder(BaseEstimator, TransformerMixin):
     """
@@ -371,7 +372,9 @@ def change_col_to_string(Xt):
     ### This converts the input column to a string and returns it ##
     return Xt.astype(str)
 
-def create_column_names(Xt, nlpvars=[], catvars=[], numvars=[],datevars=[], onehot_dict={}, colsize_dict={},datesize_dict={}):
+def create_column_names(Xt, nlpvars=[], catvars=[], discretevars=[], numvars=[], 
+                datevars=[], onehot_dict={}, colsize_dict={},datesize_dict={}):
+    
     cols_nlp = []
     ### This names all the features created by the NLP column. Hence col number=1 and axis=1 ###
     for each_nlp in nlpvars:
@@ -474,6 +477,7 @@ def find_remove_duplicates(list_of_values):
     return output
 
 def convert_ce_to_pipe(Xt):
+
     ### This converts a series to a dataframe to make category encoders work in sklearn pipelines ###
     if Xt.dtype != object:
         Xtx = Xt.cat.rename_categories(str).values.tolist()
@@ -660,7 +664,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
             basic_encoder = 'onehot'
             encoder = 'label'
         else:
-            basic_encoder = 'onehot'
+            basic_encoder = copy.deepcopy(encoders)
             encoder = copy.deepcopy(encoders)
     else:
         print('encoders must be either string or list of strings. Please check your input and try again.')
@@ -706,63 +710,59 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     ########################################
     ### Set the category encoders here #####
     ########################################
-    if basic_encoder == 'onehot':
-        be = OneHotEncoder()
-        if verbose:
-            print('Beware! one hot encoding can create hundreds if not 1000s of variables...')
-    else:
-        print('The first encoder in the list must always be onehot since only that is best for low cardinality variables.')
-        be = OneHotEncoder()
+    ### You are going to set Label Encoder as the default encoder since it is most versatile ##
+    def default_encoder():
+        return My_LabelEncoder()
+    encoder_dict = defaultdict(default_encoder)
+
+    ### you must leave drop_invariant = False for catboost since it is not a onhot type encoder. ##
+    encoder_dict = {'onehot': OneHotEncoder(),
+                    'ordinal': OrdinalEncoder(),
+                    'hashing': HashingEncoder(n_components=20, drop_invariant=True),
+                    'hash': HashingEncoder(n_components=20, drop_invariant=True),
+                    'count': CountEncoder(drop_invariant=True),
+                    'catboost': CatBoostEncoder(drop_invariant=False),
+                    'target': TargetEncoder(min_samples_leaf=3, drop_invariant=True),
+                    'glm': GLMMEncoder(drop_invariant=True),
+                    'glmm': GLMMEncoder(drop_invariant=True),
+                    'sum': SumEncoder(drop_invariant=True),
+                    'woe': WOEEncoder(randomized=False, drop_invariant=True),
+                    'bdc': BackwardDifferenceEncoder(drop_invariant=True),
+                    'bde': BackwardDifferenceEncoder(drop_invariant=True),
+                    'loo': LeaveOneOutEncoder(sigma=0.10, drop_invariant=True),
+                    'base': BaseNEncoder(base=2, drop_invariant=True),
+                    'james': JamesSteinEncoder(drop_invariant=True),
+                    'jamesstein': JamesSteinEncoder(drop_invariant=True),
+                    'helmert': HelmertEncoder(drop_invariant=True),
+                    'quantile': QuantileEncoder(drop_invariant=True, quantile=0.5, m=1.0),
+                    'summary': SummaryEncoder(drop_invariant=True, quantiles=[0.25, 0.5, 1.0], m=1.0),
+                    'label': My_LabelEncoder(),
+                    'auto': My_LabelEncoder(),
+                    }
+
+    ### set the basic encoder for low cardinality vars here ######
+    be = encoder_dict[basic_encoder]
     #### These are applied for high cardinality variables ########
-    if encoder == 'onehot':
-        le = OneHotEncoder()
+    le = encoder_dict[encoder]
+    ### How do we make sure that we create one new LE_Pipe for each catvar? Here's one way to do it.
+    lep = My_LabelEncoder_Pipe()
+    ###### Just a warning in case someone doesn't know about one hot encoding ####
+    ### these encoders result in more columns than the original - hence they are considered one hot type ###
+    onehot_type_encoders = ['onehot', 'helmert','bdc', 'bde', 'hashing','hash','sum','base', 'quantile',
+                                'summary']
+
+    if basic_encoder in onehot_type_encoders or encoder in onehot_type_encoders:
         if verbose:
-            print('Beware! one hot encoding can create hundreds if not 1000s of variables...')
-    elif encoder == 'ordinal':
-        le = OrdinalEncoder()
-    elif encoder in ['hashing','hash']:
-        le = HashingEncoder(n_components=20, drop_invariant=True)
-    elif encoder == 'count':
-        le = CountEncoder(drop_invariant=True)
-    elif encoder == 'catboost':
-        ### you must leave drop_invariant = False for catboost since it is not a onhot type encoder. ##
-        le = CatBoostEncoder(drop_invariant=False)
-    elif encoder == 'target':
-        le = TargetEncoder(drop_invariant=True)
-    elif encoder == 'glm' or encoder == 'glmm':
-        # Generalized Linear Mixed Model 
-        le = GLMMEncoder(drop_invariant=True)
-    elif encoder == 'sum' or encoder == 'sumencoder':
-        # Sum Encoder 
-        le = SumEncoder(drop_invariant=True)
-    elif encoder == 'woe':
-        le = WOEEncoder(drop_invariant=True)
-    elif encoder == 'bdc':
-        le = BackwardDifferenceEncoder(drop_invariant=True)
-    elif encoder == 'loo':
-        le = LeaveOneOutEncoder(drop_invariant=True)
-    elif encoder == 'base':
-        le = BaseNEncoder()
-    elif encoder == 'james' or encoder == 'jamesstein':
-        le = JamesSteinEncoder(drop_invariant=True)
-    elif encoder == 'helmert':
-        le = HelmertEncoder(drop_invariant=True)
-    elif encoder == 'quantile':
-        le = QuantileEncoder(drop_invariant=True, quantile=0.5, m=1.0)
-    elif encoder == 'summary':
-        le = SummaryEncoder(drop_invariant=True, quantiles=[0.25, 0.5, 1.0], m=1.0)        
-    elif encoder == 'label':
-        ### My_LabelEncoder can only work on string and category object types with NaN.
-        ### My_LabelEncoder_Pipe() can work with both category and object variables 
-        le = My_LabelEncoder()
-        ### How do we make sure that we create one new LE_Pipe for each catvar? Here's one way to do it.
-        lep = My_LabelEncoder_Pipe()
-    else:
-        ### The default is Label Encoder
-        encoder = 'label'
-        le = My_LabelEncoder()
-        ### How do we make sure that we create one new LE_Pipe for each catvar? Here's one way to do it.
-        lep = My_LabelEncoder_Pipe()
+            print('Beware! %s encoding can create hundreds if not 1000s of variables...' %basic_encoder)
+        else:
+            pass
+    elif encoder in ['hashing','hash'] or basic_encoder in ['hashing', 'hash']:
+        if verbose:
+            print('Beware! Hashing encoders can take a real long time for even small data sets!')
+        else:
+            pass
+
+
     #### This is where we convert all the encoders to pipeline components ####
     if verbose:
         print('Using %s and %s as encoders' %(be,le))
@@ -833,9 +833,6 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     ######     C A T E G O R I C A L    E N C O D E R S    H E R E ####################
     ###### we need to create column names for one hot variables ###
     ####################################################################################
-    ### these encoders result in more columns than the original - hence they are considered one hot type ###
-    onehot_type_encoders = ['helmert','bdc','hashing','hash','sum','loo','base','woe','james',
-                        'target','count','glm','glmm','summary']
     copy_cat_vars = copy.deepcopy(catvars)
     onehot_dict = {}
     
@@ -853,8 +850,6 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         for each_discrete in copy_discrete_vars:
             onehot_dict[each_discrete] = X_train[each_discrete].unique().tolist()    
     elif encoder in onehot_type_encoders:
-        if encoder in ['hashing','hash']:
-            print('Beware! hashing encoders can be really slow for even small datasets. Be patient...')
         for each_discrete in copy_discrete_vars:
             copy_lep_two = copy.deepcopy(lep_two)
             onehot_dict[each_discrete] = copy_lep_two.fit_transform(X_train[each_discrete], y_train).columns.tolist()
@@ -921,14 +916,16 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
           "colsize_dict":colsize_dict,
           "datesize_dict":datesize_dict}
     ### Create a Function using the above function to transform in pipelines ###
-    #if encoder in ['onehot','helmert','bdc','hashing','sum','loo','base','woe','james','label']:
-    ### Use the one-hot anyway since most of the times, you will be doing one-hot encoding ###
-    nlp_pipe = Pipeline([('NLP', FunctionTransformer(create_column_names_onehot, kw_args=params))])
-    #else:
-    #    nlp_pipe = Pipeline([('NLP', FunctionTransformer(create_column_names, kw_args=params))])
+    
+    if basic_encoder not in onehot_type_encoders and encoder not in onehot_type_encoders:
+        nlp_pipe = Pipeline([('NLP', FunctionTransformer(create_column_names, kw_args=params))])
+    else:
+        ### Use the one-hot anyway since most of the times, you will be doing one-hot encoding ###
+        nlp_pipe = Pipeline([('NLP', FunctionTransformer(create_column_names_onehot, kw_args=params))])
+    
     #### Chain it together in the above pipeline #########
     data_pipe = Pipeline([('scaler_pipeline', scaler_pipe), ('nlp_pipeline', nlp_pipe)])
-    #data_pipe = make_pipeline(scaler_pipe, nlp_pipe)
+    
     #####    S A V E   P I P E L I N E  ########
     ### save the model and or pipeline here ####
     ############################################
@@ -1034,6 +1031,8 @@ class LazyTransformer(TransformerMixin):
         self.yformer = None
         self.imbalanced_first_done = False
         self.smotex = None
+        self.X_index = X.index
+        self.y_index = y.index
         X = copy.deepcopy(X)
         #X = X.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
         y = copy.deepcopy(y)
@@ -1042,6 +1041,7 @@ class LazyTransformer(TransformerMixin):
             ### Hence YTransformer converts them before feeding model
             yformer = YTransformer()
         #### This is where we build pipelines for X and y #############
+        
         if self.model is not None:
             ### If a model is given, then add it to pipeline and fit it ###
             data_pipe = make_simple_pipeline(X, y, encoders=self.encoders, scalers=self.scalers,
@@ -1068,10 +1068,13 @@ class LazyTransformer(TransformerMixin):
                 ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
             ##   Now we fit the model pipeline to X and y ###
             try:
+                
+                #### This is a very important set of statements ####
                 self.xformer = data_pipe.fit(X,y)
                 if self.transform_target:
                     self.yformer = yformer.fit(X,y)
                     yt = self.yformer.transform(X, y)
+                    yt.index = self.y_index
                     self.model = ml_pipe.fit(X,yt)
                 else:
                     self.model = ml_pipe.fit(X,y)
@@ -1091,6 +1094,7 @@ class LazyTransformer(TransformerMixin):
             if self.transform_target:
                 self.yformer = yformer.fit(X,y)
                 yt = self.yformer.transform(X, y)
+                yt.index = self.y_index
                 self.xformer = data_pipe.fit(X,yt)
             else:
                 self.xformer = data_pipe.fit(X,y)
@@ -1127,11 +1131,10 @@ class LazyTransformer(TransformerMixin):
     def transform(self, X, y=None):
         X = copy.deepcopy(X)
         y = copy.deepcopy(y)
-        X_index = X.index
         start_time = time.time()
         if y is None and self.fitted:
             X_enc = self.xformer.transform(X)
-            X_enc.index = X_index
+            X_enc.index = self.X_index
             ### since xformer only transforms X ###
             difftime = max(1, int(time.time()-start_time))
             print('    Time taken to transform dataset = %s second(s)' %difftime)
@@ -1145,10 +1148,11 @@ class LazyTransformer(TransformerMixin):
         elif y is not None and self.fitted and self.model is None:
             if self.transform_target:
                 y_enc = self.yformer.transform(X, y)
+                y_enc.index = self.y_index
             else:
                 y_enc = y
             X_enc = self.xformer.transform(X)
-            X_enc.index = X_index
+            X_enc.index = self.X_index
             #### Now check if the imbalanced_flag is True, then apply SMOTE using borderline2 algorithm which works better
             if self.imbalanced_first_done and self.imbalanced:
                 pass
@@ -1168,13 +1172,14 @@ class LazyTransformer(TransformerMixin):
     def fit_transform(self, X, y=None):
         X = copy.deepcopy(X)
         y = copy.deepcopy(y)
-        X_index = X.index
+        self.X_index = X.index
         start_time = time.time()
         self.fit(X,y)
         X_trans =  self.xformer.transform(X)
-        X_trans.index = X_index
+        X_trans.index = self.X_index
         if self.transform_target:
             y_trans = self.yformer.transform(X,y)
+            y_trans.index = self.y_index
         else:
             y_trans = y
         #### Now we need to check if imbalanced flag is set ###
@@ -1250,14 +1255,13 @@ class LazyTransformer(TransformerMixin):
         start_time = time.time()
         if len(params) == 0 and not multi_label:
             rand_params = {
-                'model__learning_rate': [0.001, 0.01, 0.1, 0.3, 0.5],
-                'model__num_leaves': [20,30,40,50],
-                'model__n_estimators': [100,150,200,250],
+                'model__learning_rate': [0.0001, 0.001, 0.01, 0.1, 0.5],
+                'model__num_leaves': [5, 10,30,50],
+                'model__n_estimators': [100,200,300],
                 'model__class_weight':[None, 'balanced'],
                     }
             grid_params = {
-                'model__learning_rate': [0.001, 0.01, 0.1],
-                'model__n_estimators': [150,200,250],
+                'model__n_estimators': [100, 150, 200, 250, 300],
                 'model__class_weight':[None, 'balanced'],
                     }
 
@@ -1273,8 +1277,8 @@ class LazyTransformer(TransformerMixin):
             score_name = 'MSE'
         else:
             if grid_search:
-                scoring = 'precision'
-                score_name = 'precision'
+                scoring = 'balanced_accuracy'
+                score_name = 'balanced_accuracy'
             else:
                 scoring = 'recall'
                 score_name = 'recall'
@@ -1320,7 +1324,7 @@ class LazyTransformer(TransformerMixin):
                                         (time.time()-start_time)/60))
         print('Best params from search:\n%s' %search.best_params_)
         newpipe = search.best_estimator_.model.set_params(**search.best_params_)
-        print('Returning a new LazyTransformer pipeline that contains the best model trained on your train dataset!')
+        print('    returning a new LazyTransformer pipeline that contains the best model trained on your train dataset!')
         return newpipe
 ####################################################################################
 #TransformerMixin, BaseEstimator
@@ -1381,6 +1385,7 @@ class YTransformer(BaseEstimator, ClassifierMixin):
     
     def fit_transform(self, X, y=None):
         ### Since X for yT in a pipeline is sent as X, we need to switch X and y this way ##
+        
         self.fit(X, y)
         for each_target in self.targets:
             y_trans =  self.transformers[each_target].transform(X, y)
@@ -1462,7 +1467,7 @@ def check_if_GPU_exists():
 
 ###############################################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.32'
+version_number =  '0.40'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, 
         date_to_string=False, transform_target=False, imbalanced=False)
