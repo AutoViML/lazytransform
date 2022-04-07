@@ -46,6 +46,7 @@ from sklearn.utils.validation import column_or_1d
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.preprocessing import MaxAbsScaler, StandardScaler, MinMaxScaler
+from sklearn.preprocessing import RobustScaler
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.decomposition import TruncatedSVD
 ##############  These imports are to make trouble shooting easier #####
@@ -364,6 +365,102 @@ def left_subtract(l1,l2):
             lst.append(i)
     return lst
 
+import copy
+def convert_mixed_datatypes_to_string(df):
+    """
+    #####################################################################################
+    This a handy function for Feature Engineering - That's why I have included it in Lazy Transform
+    ########### It converts all mixed data type columns into object columns ############
+    Inputs:
+    df : pandas dataframe
+
+    Outputs:
+    df: this is the transformed DataFrame
+    #####################################################################################
+    """
+    df = copy.deepcopy(df)
+    for col in df.columns:
+        if len(df[col].apply(type).value_counts()) > 1:
+            print('Mixed data type detected in %s column. Converting all rows to string type now...' %col)
+            df[col] = df[col].map(lambda x: x if isinstance(x, str) else str(x)).values
+            if len(df[col].apply(type).value_counts()) == 1:
+                print('    completed.')
+            else:
+                print('    could not change column type. Fix it manually and then re-run EDA.')
+    return df
+############################################################################################
+def convert_all_object_columns_to_numeric(train, test=""):
+    """
+    This a handy function for Feature Engineering - That's why I have included it in Lazy Transform
+    ######################################################################################
+    This is a utility that converts string columns to numeric using MY_LABEL ENCODER.
+    Make sure test and train have the same number of columns. If you have target in train,
+    remove it before sending it through this utility. Otherwise, might blow up during test transform.
+    The beauty of My_LabelEncoder is it handles NA's and future values in test that are not in train.
+    #######################################################################################
+    Inputs:
+    train : pandas dataframe
+    test: (optional) pandas dataframe
+
+    Outputs:
+    train: this is the transformed DataFrame
+    test: (optional) this is the transformed test dataframe if given.
+    ######################################################################################
+    """
+    
+    train = copy.deepcopy(train)
+    test = copy.deepcopy(test)
+    #### This is to fill all numeric columns with a missing number ##########
+    nums = train.select_dtypes('number').columns.tolist()
+    if len(nums) == 0:
+        pass
+    else:
+
+        if train[nums].isnull().sum().sum() > 0:
+            null_cols = np.array(nums)[train[nums].isnull().sum()>0].tolist()
+            for each_col in null_cols:
+                new_missing_col = each_col + '_Missing_Flag'
+                train[new_missing_col] = 0
+                train.loc[train[each_col].isnull(),new_missing_col]=1
+                train[each_col] = train[each_col].fillna(-9999)
+                if not train[each_col].dtype in [np.float64,np.float32,np.float16]:
+                    train[each_col] = train[each_col].astype(int)
+                if not isinstance(test, str):
+                    if test is None:
+                        pass
+                    else:
+                        new_missing_col = each_col + '_Missing_Flag'
+                        test[new_missing_col] = 0
+                        test.loc[test[each_col].isnull(),new_missing_col]=1
+                        test[each_col] = test[each_col].fillna(-9999)
+                        if not test[each_col].dtype in [np.float64,np.float32,np.float16]:
+                            test[each_col] = test[each_col].astype(int)
+    ###### Now we convert all object columns to numeric ##########
+    lis = []
+    lis = train.select_dtypes('object').columns.tolist() + train.select_dtypes('category').columns.tolist()
+    if not isinstance(test, str):
+        if test is None:
+            pass
+        else:
+            lis_test = test.select_dtypes('object').columns.tolist() + test.select_dtypes('category').columns.tolist()
+            if len(left_subtract(lis, lis_test)) > 0:
+                ### if there is an extra column in train that is not in test, then remove it from consideration
+                lis = copy.deepcopy(lis_test)
+    if not (len(lis)==0):
+        for everycol in lis:
+            MLB = My_LabelEncoder()
+            try:
+                train[everycol] = MLB.fit_transform(train[everycol])
+                if not isinstance(test, str):
+                    if test is None:
+                        pass
+                    else:
+                        test[everycol] = MLB.transform(test[everycol])
+            except:
+                print('Error converting %s column from string to numeric. Continuing...' %everycol)
+                continue
+    return train, test
+################################################################################################
 def drop_second_col(Xt): 
     ### This deletes the 2nd column. Hence col number=1 and axis=1 ###
     return np.delete(Xt, 1, 1)
@@ -865,6 +962,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         scaler = MinMaxScaler()
     elif scalers=='standard' or scalers=='std':
         scaler = StandardScaler()
+    elif scalers=='robust':
+        scaler = RobustScaler(unit_variance=True)
     elif scalers=='maxabs':
         ### If you choose MaxAbsScaler, then NaNs which were Label Encoded as -1 are preserved as - (negatives). This is fantastic.
         scaler = MaxAbsScaler()
@@ -1233,7 +1332,7 @@ class LazyTransformer(TransformerMixin):
 
     def lightgbm_grid_search(self, X_train, y_train, modeltype,
                              params={}, grid_search=False, multi_label=False,
-                             log_y=False, gpu_flag=False):
+                             ):
         """
         Perform GridSearchCV or RandomizedSearchCV using LightGBM based LazyTransformer pipeline.
         -- Remember that you can only use LightGBM scikit-learn syntax based models here. 
@@ -1323,6 +1422,7 @@ class LazyTransformer(TransformerMixin):
         print('Time taken for Hyper Param tuning of LGBM (in minutes) = %0.1f' %(
                                         (time.time()-start_time)/60))
         print('Best params from search:\n%s' %search.best_params_)
+
         newpipe = search.best_estimator_.model.set_params(**search.best_params_)
         print('    returning a new LazyTransformer pipeline that contains the best model trained on your train dataset!')
         return newpipe
@@ -1467,7 +1567,7 @@ def check_if_GPU_exists():
 
 ###############################################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.40'
+version_number =  '0.41'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, 
         date_to_string=False, transform_target=False, imbalanced=False)

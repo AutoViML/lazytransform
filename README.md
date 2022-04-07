@@ -126,16 +126,16 @@ Once you import it, you can define the object by giving several options such as:
   - `auto` - It uses `onehot` encoding for low-cardinality variables and `label` encoding for high cardinality variables.
   - `onehot` - One Hot encoding - it will be used for all categorical features irrespective of cardinality
   - `label` - Label Encoding - it will be used for all categorical features irrespective of cardinality
-  - `hashing` or `hash` - Hashing (or Hash) Encoding
-  - `helmert` - Helmert Encoding
-  - `bdc` - BDC Encoding
-  - `sum` - Sum Encoding
-  - `loo` - Leave one out Encoding
-  - `base` - Base encoding
-  - `woe` - Weight of Evidence Encoding
-  - `james` - James Encoding
-  - `target` - Target Encoding
-  - `count` - Count Encoding
+  - `hashing` or `hash` - Hashing (or Hash) Encoding - will be used for all categorical variables
+  - `helmert` - Helmert Encoding - will be used for all categorical variables
+  - `bdc` - BDC Encoding - will be used for all categorical variables
+  - `sum` - Sum Encoding - will be used for all categorical variables
+  - `loo` - Leave one out Encoding - will be used for all categorical variables
+  - `base` - Base encoding - will be used for all categorical variables
+  - `woe` - Weight of Evidence Encoding - will be used for all categorical variables
+  - `james` - James Encoding - will be used for all categorical variables
+  - `target` - Target Encoding - will be used for all categorical variables
+  - `count` - Count Encoding - will be used for all categorical variables
   - `glm`,`glmm` - Generalized Linear Model Encoding
 - Here is a description of various encoders and their uses from the excellent <a href="https://contrib.scikit-learn.org/category_encoders/"> category_encoders</a> python library:<br>
     - `HashingEncoder`: HashingEncoder is a multivariate hashing implementation with configurable dimensionality/precision. The advantage of this encoder is that it does not maintain a dictionary of observed categories. Consequently, the encoder does not grow in size and accepts new values during data scoring by design.
@@ -161,6 +161,7 @@ Once you import it, you can define the object by giving several options such as:
   - `None` No scaler. Great for almost all datasets. Test it first and then try one of the scalers below.
   - `std` standard scaler. Great for almost all datasets.
   - `minmax` minmax scaler. Great for datasets where you need to see the distribution between 0 and 1.
+  - `robust` Robust scaler. Great for datasets where you have outliers.
   - `maxabs` max absolute scaler. Great for scaling but leaves the negative values as they are (negative). 
 - `date_to_string`: default is False. If you want to use date variables as strings (categorical), then set it as True.You can use this option when there are very few dates in your dataset. If you set it as False, it will convert it into date time format and extract up to 20 features from your date time column. This is the default option and best option.
 - `transform_target`: default is False. If you want to transform your target variable(s), then set it as True and we will transform your target(s) as numeric using Label Encoding as well as multi-label Binary classes. This is a great option when you have categorical target variables.
