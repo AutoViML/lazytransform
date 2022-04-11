@@ -58,6 +58,7 @@ However, you must install and import those models on your own and define them as
 <li><b>lazytransform is built using pandas, numpy, scikit-learn, category_encoders and imb-learn libraries.</b> It should run on most Python 3 Anaconda installations without additional installs. You won't have to import any special libraries other than "imb-learn" and "category_encoders".</li>
 </ol>
 The best method to install it is to use conda to install lazytransform<p>
+
 ```
         conda install -c conda-forge lazytransform
 ```
