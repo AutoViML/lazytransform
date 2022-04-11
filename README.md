@@ -63,11 +63,13 @@ The best method to install it is to use conda to install lazytransform<p>
         conda install -c conda-forge lazytransform
 ```
 <a href="https://ibb.co/fXnbPd6"><img src="https://i.ibb.co/qDWzPYq/conda-install.png" alt="conda-install" border="0"></a>
+The second best option is to use "pip install".
 
 ```
 pip install lazytransform 
 ```
-But on Kaggle Notebooks, you must slightly modify the installation into two steps. If you don't do this, you will get an error!
+Alert! On Kaggle Notebooks, you must slightly modify the installation into two steps. If you don't do this, you will get an error!
+
 ```
 pip install lazytransform --ignore-installed --no-deps
 pip install category-encoders --ignore-installed --no-deps
