@@ -5,7 +5,7 @@ Automatically transform all categorical, date-time, NLP variables in your data s
 
 # Table of Contents
 <ul>
-<li><a href="##">What is lazytransform</a></li>
+<li><a href="#What_is_lazytransform?">What is lazytransform</a></li>
 <li><a href="## How to use lazytransform">How to use lazytransform</a></li>
 <li><a href="#How to install">How to install lazytransform</a></li>
 <li><a href="#Usage">Usage</a></li>
