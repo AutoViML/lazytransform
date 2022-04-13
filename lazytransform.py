@@ -1286,12 +1286,13 @@ class LazyTransformer(TransformerMixin):
             pass
         elif not self.imbalanced_first_done and self.imbalanced:
             sm = self.smotex
-            if verbose:
+            if self.verbose:
                 print('Imbalanced flag set. Using SMOTE to transform X and y...')
             X_trans, y_trans = sm.fit_resample(X_trans, y_trans)
             self.imbalanced_first_done = True
             self.smotex = sm
-            print('    SMOTE transformed data in pipeline. Dont forget to use transformed X and y from output.')
+            if self.verbose:
+                print('    SMOTE transformed data in pipeline. Dont forget to use transformed X and y from output.')
         difftime = max(1, int(time.time()-start_time))
         print('    Time taken to transform dataset = %s second(s)' %difftime)
         return X_trans, y_trans
@@ -1567,7 +1568,7 @@ def check_if_GPU_exists():
 
 ###############################################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.41'
+version_number =  '0.42'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, 
         date_to_string=False, transform_target=False, imbalanced=False)
