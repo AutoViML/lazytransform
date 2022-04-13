@@ -5,8 +5,8 @@ Automatically transform all categorical, date-time, NLP variables in your data s
 
 # Table of Contents
 <ul>
-<li><a href="#What is lazytransform">What is lazytransform</a></li>
-<li><a href="#How to use lazytransform">How to use lazytransform</a></li>
+<li><a href="#What%20is%20lazytransform?">What is lazytransform</a></li>
+<li><a href="#How%20to%20use%20lazytransform">How to use lazytransform</a></li>
 <li><a href="#How to install">How to install lazytransform</a></li>
 <li><a href="#Usage">Usage</a></li>
 <li><a href="#api">API</a></li>
@@ -20,7 +20,7 @@ Automatically transform all categorical, date-time, NLP variables in your data s
 `lazytransform` is a new python library for automatically transforming your entire dataset to numeric format using category encoders, NLP text vectorizers and pandas date time processing functions. All in a single line of code!
 
 
-## How to use lazytransform
+<h2>How to use lazytransform</h2>
 `lazytransform` can be used in many ways. Let us look at each of them below.
 
 ### 1.  Using lazytransform as a simple pandas data transformation pipeline 
