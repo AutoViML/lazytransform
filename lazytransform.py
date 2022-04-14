@@ -1130,9 +1130,9 @@ class LazyTransformer(TransformerMixin):
         self.yformer = None
         self.imbalanced_first_done = False
         self.smotex = None
+        X = copy.deepcopy(X)
         self.X_index = X.index
         self.y_index = y.index
-        X = copy.deepcopy(X)
         #X = X.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
         y = copy.deepcopy(y)
         if self.transform_target:
@@ -1155,7 +1155,7 @@ class LazyTransformer(TransformerMixin):
                     ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
                 elif model_name not in ['MultiOutputClassifier','MultiOutputRegressor']:
                     ### In this case, y has more than 1 column, hence if it is not a multioutput model, give error
-                    print('Erroring: please ensure you input a scikit-learn MultiOutput Regressor or Classifier')
+                    print('Multi-label: please wrap your input model in a MultiOutput Regressor or Classifier and try again.')
                     return self
                 else:
                     ## In this case we have a multi output model. So let's use it ###
@@ -1167,10 +1167,10 @@ class LazyTransformer(TransformerMixin):
                 ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
             ##   Now we fit the model pipeline to X and y ###
             try:
-                
                 #### This is a very important set of statements ####
                 self.xformer = data_pipe.fit(X,y)
                 if self.transform_target:
+                    self.y_index = y.index
                     self.yformer = yformer.fit(X,y)
                     yt = self.yformer.transform(X, y)
                     yt.index = self.y_index
@@ -1189,7 +1189,6 @@ class LazyTransformer(TransformerMixin):
             print('No model input given...')
             #### here we check if we should add a model to the pipeline 
             print('X and y Transformer Pipeline created...')
-            self.fitted = True
             if self.transform_target:
                 self.yformer = yformer.fit(X,y)
                 yt = self.yformer.transform(X, y)
@@ -1198,9 +1197,10 @@ class LazyTransformer(TransformerMixin):
             else:
                 self.xformer = data_pipe.fit(X,y)
             ## we will leave self.model as None ##
+            self.fitted = True
         ### print imbalanced ###
         if self.imbalanced:
-            #### This is where we do SMOTE #######################
+            print('### Alert! Do not use SMOTE if this is not an imbalanced classification problem #######')
             if isinstance(X, pd.DataFrame):
                 var_classes = classify_vars_pandas(X)
                 cat_vars = var_classes['categorical_vars']
@@ -1230,6 +1230,7 @@ class LazyTransformer(TransformerMixin):
     def transform(self, X, y=None):
         X = copy.deepcopy(X)
         y = copy.deepcopy(y)
+        self.X_index = X.index
         start_time = time.time()
         if y is None and self.fitted:
             X_enc = self.xformer.transform(X)
@@ -1246,6 +1247,7 @@ class LazyTransformer(TransformerMixin):
             return X, y
         elif y is not None and self.fitted and self.model is None:
             if self.transform_target:
+                self.y_index = y.index
                 y_enc = self.yformer.transform(X, y)
                 y_enc.index = self.y_index
             else:
@@ -1285,6 +1287,7 @@ class LazyTransformer(TransformerMixin):
         if self.imbalanced_first_done and self.imbalanced:
             pass
         elif not self.imbalanced_first_done and self.imbalanced:
+            print('### Alert! Do not use SMOTE if this is not an imbalanced classification problem #######')
             sm = self.smotex
             if self.verbose:
                 print('Imbalanced flag set. Using SMOTE to transform X and y...')
@@ -1469,9 +1472,10 @@ class YTransformer(BaseEstimator, ClassifierMixin):
         return self
     
     def transform(self, X, y=None):
+        target_len = len(self.targets) - 1
         for i, each_target in enumerate(self.targets):
             if y is None:
-                return X, y
+                return X
             else:
                 if isinstance(y, pd.Series):
                     y = pd.DataFrame(y)
@@ -1482,7 +1486,10 @@ class YTransformer(BaseEstimator, ClassifierMixin):
                     y_t = self.transformers[each_target].transform(y.iloc[:,i])
                     y_trans = pd.DataFrame(y_trans)
                     y_trans[each_target] = y_t
-                return y_trans
+                    if i == target_len:
+                        return y_trans
+                    else:
+                        continue
     
     def fit_transform(self, X, y=None):
         ### Since X for yT in a pipeline is sent as X, we need to switch X and y this way ##
@@ -1568,7 +1575,7 @@ def check_if_GPU_exists():
 
 ###############################################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.42'
+version_number =  '0.43'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, 
         date_to_string=False, transform_target=False, imbalanced=False)
