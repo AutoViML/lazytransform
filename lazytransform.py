@@ -892,14 +892,15 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     # CREATE one_dim TRANSFORMER in order to fit between imputer and TFiDF for NLP here ###
     ####################################################################################
     one_dim = Make2D(imp_missing)
+    remove_special_chars =  lambda x:re.sub('[^A-Za-z0-9_]+', ' ', x)
     if X_train.shape[0] >= 100000:
         #tiffd = CountVectorizer(strip_accents='unicode',max_features=1000)
-        tiffd = TfidfVectorizer(strip_accents='unicode',max_features=3000)
+        tiffd = TfidfVectorizer(strip_accents='unicode',max_features=3000, preprocessor=remove_special_chars)
         top_n = 100 ## number of components in SVD
         #tiffd = MyTiff(strip_accents='unicode',max_features=300, min_df=0.01)
     else:
         #vect = CountVectorizer(strip_accents='unicode',max_features=100)
-        tiffd = TfidfVectorizer(strip_accents='unicode',max_features=1000)
+        tiffd = TfidfVectorizer(strip_accents='unicode',max_features=1000, preprocessor=remove_special_chars)
         top_n = 10 ## number of components in SVD
         #tiffd = MyTiff(strip_accents='unicode',max_features=300, min_df=0.01)
     ### create a new pipeline with filling with constant missing ##
@@ -1577,8 +1578,8 @@ def check_if_GPU_exists():
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
 version_number =  '0.43'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
-    lazy = LazyTransformer(model=None, encoders='auto', scalers=None, 
-        date_to_string=False, transform_target=False, imbalanced=False)
+    lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
+        transform_target=False, imbalanced=False, verbose=0)
     ### if you are not using a model in pipeline, you must use fit and transform ##
         X_trainm, y_trainm = lazy.fit_transform(X_train, y_train)
         X_testm = lazy.transform(X_test)
