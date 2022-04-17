@@ -49,6 +49,7 @@ from sklearn.preprocessing import MaxAbsScaler, StandardScaler, MinMaxScaler
 from sklearn.preprocessing import RobustScaler
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.decomposition import TruncatedSVD
+
 ##############  These imports are to make trouble shooting easier #####
 import copy
 import pickle
@@ -359,34 +360,40 @@ def classify_vars_pandas(df, verbose=0):
     return var_dict
 ##################################################################################################
 def left_subtract(l1,l2):
+    """This handy function subtracts one list from another. Probably my most popular function."""
     lst = []
     for i in l1:
         if i not in l2:
             lst.append(i)
     return lst
-
+############################################################################################
 import copy
 def convert_mixed_datatypes_to_string(df):
     """
     #####################################################################################
-    This a handy function for Feature Engineering - That's why I have included it in Lazy Transform
+    Handy function for Feature Transformation: That's why it's included in LazyTransform
     ########### It converts all mixed data type columns into object columns ############
     Inputs:
     df : pandas dataframe
 
     Outputs:
-    df: this is the transformed DataFrame
+    df: this is the transformed DataFrame with all mixed data types now as objects
     #####################################################################################
     """
     df = copy.deepcopy(df)
-    for col in df.columns:
+    cols = df.columns.tolist()
+    copy_cols = copy.deepcopy(cols)
+    for col in copy_cols:
         if len(df[col].apply(type).value_counts()) > 1:
-            print('Mixed data type detected in %s column. Converting all rows to string type now...' %col)
-            df[col] = df[col].map(lambda x: x if isinstance(x, str) else str(x)).values
-            if len(df[col].apply(type).value_counts()) == 1:
-                print('    completed.')
-            else:
-                print('    could not change column type. Fix it manually and then re-run EDA.')
+            print('Mixed data type detected in %s column. Converting it to object type...' %col)
+            try:
+                df[col] = df[col].map(lambda x: x if isinstance(x, str) else str(x)).values
+                if len(df[col].apply(type).value_counts()) > 1:
+                    df.drop(col,axis=1,inplace=True)
+                    print('    %s still has mixed data types. Dropping it.' %col)
+            except:
+                df.drop(col,axis=1,inplace=True)
+                print('    dropping %s since it gives error.' %col)
     return df
 ############################################################################################
 def convert_all_object_columns_to_numeric(train, test=""):
@@ -518,45 +525,64 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], numv
                         colsize_dict={}, datesize_dict={}):
     ### This names all the features created by the NLP column. Hence col number=1 and axis=1 ###
     ### Once you get back names of one hot encoded columns, change the column names
-    
     cols_cat = []
+    x_cols = []
     for each_cat in catvars:
         categs = onehot_dict[each_cat]
-        x_cols = [each_cat+'_'+str(categs[i]) for i in range(len(categs))]
-        cols_cat += x_cols
+        if isinstance(categs, str):
+            if categs == 'label':
+                cat_add = each_cat+'_encoded'
+                cols_cat.append(cat_add)
+            else:
+                categs = [categs]
+                cat_add = [each_cat+'_'+str(categs[i]) for i in range(len(categs))]
+                cols_cat += cat_add
+        else:
+            cat_add = [each_cat+'_'+str(categs[i]) for i in range(len(categs))]
+            cols_cat += cat_add
     cols_cat = make_unique_columns(cols_cat)
-
+    
     cols_discrete = []
+    discrete_add = []
     for each_discrete in discretevars:
         ### for anything other than one-hot we should just use label encoding to make it simpler ##
         try:
             categs = onehot_dict[each_discrete]
-            discrete_add = [each_discrete+'_'+x for x in categs]
-            cols_discrete += discrete_add
+            if isinstance(categs, str):
+                if categs == 'label':
+                    discrete_add = each_discrete+'_encoded'
+                    cols_discrete.append(discrete_add)
+                else:
+                    categs = [categs]
+                    discrete_add = [each_discrete+'_'+x for x in categs]
+                    cols_discrete += discrete_add
+            else:
+                discrete_add = [each_discrete+'_'+x for x in categs]
+                cols_discrete += discrete_add
         except:
             ### if there is no new var to be created, just use the existing discrete vars itself ###
             cols_discrete.append(each_discrete)
     cols_discrete = make_unique_columns(cols_discrete)
-
+    
     cols_nlp = []
+    nlp_add = []
     for each_nlp in nlpvars:
         colsize = colsize_dict[each_nlp]
         nlp_add = [each_nlp+'_'+str(x) for x in range(colsize)]
         cols_nlp += nlp_add
     ## do the same for datevars ###
     cols_date = []
+    date_add = []
     for each_date in datevars:
         colsize = datesize_dict[each_date]
         date_add = [each_date+'_'+str(x) for x in range(colsize)]
         cols_date += date_add
     #### this is where we put all the column names together #######
     cols_names = cols_cat+cols_discrete+cols_nlp+cols_date+numvars
-    if nlpvars:
-        ### Xt is a Sparse matrix array, we need to convert it  to dense array ##
-        if scipy.sparse.issparse(Xt):
-            return pd.DataFrame(Xt.toarray(), columns = cols_names)
-        else:
-            return pd.DataFrame(Xt, columns = cols_names)            
+    
+    ### Xt is a Sparse matrix array, we need to convert it  to dense array ##
+    if scipy.sparse.issparse(Xt):
+        return pd.DataFrame(Xt.toarray(), columns = cols_names)
     else:
         ### Xt is already a dense array, no need to convert it ##
         return pd.DataFrame(Xt, columns = cols_names)
@@ -730,6 +756,10 @@ class Make2D:
         return self.transformer.inverse_transform(
             np.expand_dims(X, axis=1)).ravel()
 ##################################################################################
+def return_default():
+    missing_value = "missing_"+str(random.randint(1,1000))
+    return missing_value
+##################################################################################
 def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='', 
             date_to_string=False, save_flag=False, verbose=0):
     """
@@ -813,7 +843,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     encoder_dict = defaultdict(default_encoder)
 
     ### you must leave drop_invariant = False for catboost since it is not a onhot type encoder. ##
-    encoder_dict = {'onehot': OneHotEncoder(),
+    encoder_dict = {'onehot': OneHotEncoder(handle_unknown='ignore'),
                     'ordinal': OrdinalEncoder(),
                     'hashing': HashingEncoder(n_components=20, drop_invariant=True),
                     'hash': HashingEncoder(n_components=20, drop_invariant=True),
@@ -932,8 +962,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     ###### we need to create column names for one hot variables ###
     ####################################################################################
     copy_cat_vars = copy.deepcopy(catvars)
-    onehot_dict = {}
-    
+    onehot_dict = defaultdict(return_default)
+    ##### This is extremely complicated logic -> be careful before modifying them!
     if basic_encoder == 'onehot':
         for each_catcol in copy_cat_vars:
             onehot_dict[each_catcol] = X_train[each_catcol].unique().tolist()
@@ -941,8 +971,11 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         for each_catcol in copy_cat_vars:
             copy_lep_one = copy.deepcopy(lep_one)
             onehot_dict[each_catcol] = copy_lep_one.fit_transform(X_train[each_catcol], y_train).columns.tolist()
+    else:
+        for each_catcol in copy_cat_vars:
+            onehot_dict[each_catcol] = 'label'
     ### we now need to do the same for discrete variables based on encoder that is selected ##
-    
+    ##### This is extremely complicated logic -> be careful before modifying them!
     copy_discrete_vars = copy.deepcopy(discretevars)
     if encoder == 'onehot':
         for each_discrete in copy_discrete_vars:
@@ -951,6 +984,10 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         for each_discrete in copy_discrete_vars:
             copy_lep_two = copy.deepcopy(lep_two)
             onehot_dict[each_discrete] = copy_lep_two.fit_transform(X_train[each_discrete], y_train).columns.tolist()
+    else:
+        ### Then mark it as label encoding so it can be handled properly ####
+        for each_discrete in copy_discrete_vars:
+            onehot_dict[each_discrete] = 'label'
     ### if you drop remainder, then leftovervars is not needed.
     remainder = 'drop'
     
@@ -962,7 +999,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     if scalers=='max' or scalers == 'minmax':
         scaler = MinMaxScaler()
     elif scalers=='standard' or scalers=='std':
-        scaler = StandardScaler()
+        ### You have to set with_mean=False when dealing with sparse matrices ##
+        scaler = StandardScaler(with_mean=False)
     elif scalers=='robust':
         scaler = RobustScaler(unit_variance=True)
     elif scalers=='maxabs':
@@ -1133,7 +1171,8 @@ class LazyTransformer(TransformerMixin):
         self.smotex = None
         X = copy.deepcopy(X)
         self.X_index = X.index
-        self.y_index = y.index
+        if y is not None:
+            self.y_index = y.index
         #X = X.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
         y = copy.deepcopy(y)
         if self.transform_target:
@@ -1141,7 +1180,7 @@ class LazyTransformer(TransformerMixin):
             ### Hence YTransformer converts them before feeding model
             yformer = YTransformer()
         #### This is where we build pipelines for X and y #############
-        
+        start_time = time.time()
         if self.model is not None:
             ### If a model is given, then add it to pipeline and fit it ###
             data_pipe = make_simple_pipeline(X, y, encoders=self.encoders, scalers=self.scalers,
@@ -1156,8 +1195,8 @@ class LazyTransformer(TransformerMixin):
                     ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
                 elif model_name not in ['MultiOutputClassifier','MultiOutputRegressor']:
                     ### In this case, y has more than 1 column, hence if it is not a multioutput model, give error
-                    print('Multi-label: please wrap your input model in a MultiOutput Regressor or Classifier and try again.')
-                    return self
+                    print('    Alert: Multi-Label problem - make sure your input model can do MultiOutput!')
+                    ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
                 else:
                     ## In this case we have a multi output model. So let's use it ###
                     #ml_pipe = make_pipeline(data_pipe, self.model)
@@ -1171,10 +1210,12 @@ class LazyTransformer(TransformerMixin):
                 #### This is a very important set of statements ####
                 self.xformer = data_pipe.fit(X,y)
                 if self.transform_target:
-                    self.y_index = y.index
+                    if y is not None:
+                        self.y_index = y.index
                     self.yformer = yformer.fit(X,y)
                     yt = self.yformer.transform(X, y)
-                    yt.index = self.y_index
+                    if y is not None:
+                        yt.index = self.y_index
                     self.model = ml_pipe.fit(X,yt)
                 else:
                     self.model = ml_pipe.fit(X,y)
@@ -1193,7 +1234,8 @@ class LazyTransformer(TransformerMixin):
             if self.transform_target:
                 self.yformer = yformer.fit(X,y)
                 yt = self.yformer.transform(X, y)
-                yt.index = self.y_index
+                if y is not None:
+                    yt.index = self.y_index
                 self.xformer = data_pipe.fit(X,yt)
             else:
                 self.xformer = data_pipe.fit(X,y)
@@ -1218,6 +1260,8 @@ class LazyTransformer(TransformerMixin):
                 self.smotex = BorderlineSMOTE()
                 if self.verbose:
                     print('Imbalanced flag set. Borderline SMOTE will be added to pipeline.')
+        difftime = max(1, int(time.time()-start_time))
+        print('    Time taken to fit dataset = %s second(s)' %difftime)
         return self
 
     def predict(self, X, y=None):
@@ -1248,9 +1292,11 @@ class LazyTransformer(TransformerMixin):
             return X, y
         elif y is not None and self.fitted and self.model is None:
             if self.transform_target:
-                self.y_index = y.index
+                if y is not None:
+                    self.y_index = y.index
                 y_enc = self.yformer.transform(X, y)
-                y_enc.index = self.y_index
+                if y is not None:
+                    y_enc.index = self.y_index
             else:
                 y_enc = y
             X_enc = self.xformer.transform(X)
@@ -1275,13 +1321,16 @@ class LazyTransformer(TransformerMixin):
         X = copy.deepcopy(X)
         y = copy.deepcopy(y)
         self.X_index = X.index
+        if y is not None:
+            self.y_index = y.index
         start_time = time.time()
         self.fit(X,y)
         X_trans =  self.xformer.transform(X)
         X_trans.index = self.X_index
         if self.transform_target:
             y_trans = self.yformer.transform(X,y)
-            y_trans.index = self.y_index
+            if y is not None:
+                y_trans.index = self.y_index
         else:
             y_trans = y
         #### Now we need to check if imbalanced flag is set ###
@@ -1491,6 +1540,7 @@ class YTransformer(BaseEstimator, ClassifierMixin):
                         return y_trans
                     else:
                         continue
+                return y_trans
     
     def fit_transform(self, X, y=None):
         ### Since X for yT in a pipeline is sent as X, we need to switch X and y this way ##
@@ -1500,7 +1550,7 @@ class YTransformer(BaseEstimator, ClassifierMixin):
             y_trans =  self.transformers[each_target].transform(X, y)
         return y_trans
     
-    def inverse_transform(self, X, y=None):
+    def inverse_transform(self, y):
         for i, each_target in enumerate(self.targets):
             if i == 0:
                 transformer_ = self.transformers[each_target]
@@ -1580,7 +1630,7 @@ version_number =  '0.43'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, verbose=0)
-    ### if you are not using a model in pipeline, you must use fit and transform ##
+    ### if you are not using a model in pipeline, you must use fit and transform ###
         X_trainm, y_trainm = lazy.fit_transform(X_train, y_train)
         X_testm = lazy.transform(X_test)
     ### If using a model in pipeline, use fit and predict only ###
