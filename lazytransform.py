@@ -43,7 +43,7 @@ from collections import defaultdict
 ### These imports give fit_transform method for free ###
 from sklearn.base import BaseEstimator, TransformerMixin 
 from sklearn.utils.validation import column_or_1d
-from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.base import RegressorMixin, ClassifierMixin
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.preprocessing import MaxAbsScaler, StandardScaler, MinMaxScaler
 from sklearn.preprocessing import RobustScaler
@@ -67,10 +67,11 @@ from sklearn.preprocessing import LabelEncoder
 from category_encoders.wrapper import PolynomialWrapper
 from category_encoders.quantile_encoder import QuantileEncoder
 from category_encoders.quantile_encoder import SummaryEncoder
+from category_encoders import OneHotEncoder
 from imblearn.over_sampling import SMOTE, BorderlineSMOTE, SMOTENC
 import imblearn
 from sklearn.pipeline import make_pipeline, Pipeline
-from sklearn.preprocessing import OneHotEncoder
+#from sklearn.preprocessing import OneHotEncoder
 #########################################################
 class My_LabelEncoder(BaseEstimator, TransformerMixin):
     """
@@ -95,6 +96,10 @@ class My_LabelEncoder(BaseEstimator, TransformerMixin):
         self.max_val = 0
         
     def fit(self,testx, y=None):
+        ### Do not change this since Rare class combiner requires this test ##
+        if isinstance(testx, tuple):
+            y = testx[1]
+            testx = testx[0]
         ## testx must still be a pd.Series for this encoder to work!
         if isinstance(testx, pd.Series):
             pass
@@ -121,6 +126,10 @@ class My_LabelEncoder(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, testx, y=None):
+        ### Do not change this since Rare class combiner requires this test ##
+        if isinstance(testx, tuple):
+            y = testx[1]
+            testx = testx[0]
         ## testx must still be a pd.Series for this encoder to work!
         if isinstance(testx, pd.Series):
             pass
@@ -211,6 +220,10 @@ class My_LabelEncoder_Pipe(BaseEstimator, TransformerMixin):
         self.max_val = 0
         
     def fit(self,testx, y=None):
+        ### Do not change this since Rare class combiner requires this test ##
+        if isinstance(testx, tuple):
+            y = testx[1]
+            testx = testx[0]
         if isinstance(testx, pd.Series):
             pass
         elif isinstance(testx, np.ndarray):
@@ -235,6 +248,10 @@ class My_LabelEncoder_Pipe(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, testx, y=None):
+        ### Do not change this since Rare class combiner requires this test ##
+        if isinstance(testx, tuple):
+            y = testx[1]
+            testx = testx[0]
         ## testx must still be a pd.Series for this encoder to work!
         if isinstance(testx, pd.Series):
             pass
@@ -586,7 +603,7 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], numv
     else:
         ### Xt is already a dense array, no need to convert it ##
         return pd.DataFrame(Xt, columns = cols_names)
-
+######################################################################################
 def find_remove_duplicates(list_of_values):
     """
     # Removes duplicates from a list to return unique values - USED ONLY ONCE
@@ -669,10 +686,11 @@ def analyze_problem_type(y_train, target, verbose=0) :
                 else:
                     model_class = 'Multi_Classification'
     ########### print this for the start of next step ###########
-    if multi_label:
-        print('''#### %s %s problem ####''' %('Multi_Label', model_class))
-    else:
-        print('''#### %s %s problem ####''' %('Single_Label', model_class))
+    if verbose:
+        if multi_label:
+            print('''#### %s %s problem ####''' %('Multi_Label', model_class))
+        else:
+            print('''#### %s %s problem ####''' %('Single_Label', model_class))
     return model_class, multi_label
 ####################################################################################################
 import copy
@@ -761,7 +779,7 @@ def return_default():
     return missing_value
 ##################################################################################
 def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='', 
-            date_to_string=False, save_flag=False, verbose=0):
+            date_to_string=False, save_flag=False, combine_rare_flag=False, verbose=0):
     """
     ######################################################################################################################
     # # This is the SIMPLEST best pipeline for NLP and Time Series problems - Created by Ram Seshadri
@@ -812,7 +830,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     ###### This helps find all the predictor variables 
     cols = X_train.columns.tolist()
     #### Send target variable as it is so that y_train is analyzed properly ###
-    modeltype, multi_label = analyze_problem_type(y_train, target)
+    modeltype, multi_label = analyze_problem_type(y_train, target, verbose=1)
     print('Shape of dataset: %s. Now we classify variables into different types...' %(X_train.shape,))
     var_dict = classify_vars_pandas(df[cols],verbose)
     #### Once vars are classified bucket them into major types ###
@@ -843,7 +861,9 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     encoder_dict = defaultdict(default_encoder)
 
     ### you must leave drop_invariant = False for catboost since it is not a onhot type encoder. ##
-    encoder_dict = {'onehot': OneHotEncoder(handle_unknown='ignore'),
+    encoder_dict = {
+                    #'onehot': OneHotEncoder(handle_unknown='ignore'), ## this is for sklearn version ##
+                    'onehot': OneHotEncoder(handle_unknown='value'), ### this is for category_encoders version
                     'ordinal': OrdinalEncoder(),
                     'hashing': HashingEncoder(n_components=20, drop_invariant=True),
                     'hash': HashingEncoder(n_components=20, drop_invariant=True),
@@ -880,44 +900,60 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
 
     if basic_encoder in onehot_type_encoders or encoder in onehot_type_encoders:
         if verbose:
-            print('Beware! %s encoding can create hundreds if not 1000s of variables...' %basic_encoder)
+            print('    Beware! %s encoding can create hundreds if not 1000s of variables...' %basic_encoder)
         else:
             pass
     elif encoder in ['hashing','hash'] or basic_encoder in ['hashing', 'hash']:
         if verbose:
-            print('Beware! Hashing encoders can take a real long time for even small data sets!')
+            print('    Beware! Hashing encoders can take a real long time for even small data sets!')
         else:
             pass
 
-
-    #### This is where we convert all the encoders to pipeline components ####
+    ######################################################################################
+    ####          This is where we convert all the encoders to pipeline components    ####
+    ######################################################################################
     if verbose:
         print('Using %s and %s as encoders' %(be,le))
     imp_missing = SimpleImputer(strategy='constant', fill_value='missing')
     imp = SimpleImputer(strategy='constant',fill_value=-99)
     convert_ce_to_pipe_func = FunctionTransformer(convert_ce_to_pipe)
+    rcc = Rare_Class_Combiner_Pipe()
+    if combine_rare_flag:
+        print('    combining rare classes for categorical and discrete vars as given...')
+
     #### lep_one is the basic encoder of cat variables ############
     if basic_encoder == 'label':
         ######  Create a function called drop_second_col that drops the second unnecessary column in My_Label_Encoder
         drop_second_col_func = FunctionTransformer(drop_second_col)
         #### Now combine it with the LabelEncoder to make it run smoothly in a Pipe ##
-        lep_one = Pipeline([('basic_encoder', lep), ('drop_second_column', drop_second_col_func)])
-        #lep_one = make_pipeline(lep, drop_second_col_func)
-        ### lep_one uses My_LabelEncoder to first label encode and then drop the second unused column ##
+        if combine_rare_flag:
+            ### lep_one uses rare_class_combiner with My_LabelEncoder to first label encode and then drop the second unused column ##
+            lep_one = Pipeline([('rare_class_combiner', rcc), ('basic_encoder', lep), ('drop_second_column', drop_second_col_func)])
+        else:
+            ### lep_one uses My_LabelEncoder to first label encode and then drop the second unused column ##
+            lep_one = Pipeline([('basic_encoder', lep), ('drop_second_column', drop_second_col_func)])
     else:
-        lep_one = Pipeline([('convert_CE_to_pipe', convert_ce_to_pipe_func), ('basic_encoder', be)])
-        #lep_one = make_pipeline(convert_ce_to_pipe_func, be)
+        if combine_rare_flag:
+            lep_one = Pipeline([('rare_class_combiner', rcc),('convert_CE_to_pipe', convert_ce_to_pipe_func), ('basic_encoder', be)])
+        else:
+            lep_one = Pipeline([('convert_CE_to_pipe', convert_ce_to_pipe_func), ('basic_encoder', be)])
     #### lep_two acts as the major encoder of discrete string variables ############
     if encoder == 'label':
         ######  Create a function called drop_second_col that drops the second unnecessary column in My_Label_Encoder
         drop_second_col_func = FunctionTransformer(drop_second_col)
         #### Now combine it with the LabelEncoder to make it run smoothly in a Pipe ##
-        lep_two = Pipeline([('basic_encoder', lep), ('drop_second_column', drop_second_col_func)])
-        #lep_two = make_pipeline(lep, drop_second_col_func)
-        ### lep_one uses My_LabelEncoder to first label encode and then drop the second unused column ##
+        if combine_rare_flag:
+            ### lep_one uses rare_class_combiner My_LabelEncoder to first label encode and then drop the second unused column ##
+            lep_two = Pipeline([('rare_class_combiner', rcc), ('basic_encoder', lep), ('drop_second_column', drop_second_col_func)])
+        else:
+            ### lep_one uses My_LabelEncoder to first label encode and then drop the second unused column ##
+            lep_two = Pipeline([('basic_encoder', lep), ('drop_second_column', drop_second_col_func)])
     else:
         #lep_two = make_pipeline(convert_ce_to_pipe_func, le)
-        lep_two = Pipeline([('convert_CE_to_pipe', convert_ce_to_pipe_func), ('basic_encoder', le)])
+        if combine_rare_flag:
+            lep_two = Pipeline([('rare_class_combiner', rcc), ('convert_CE_to_pipe', convert_ce_to_pipe_func), ('basic_encoder', le)])
+        else:
+            lep_two = Pipeline([('convert_CE_to_pipe', convert_ce_to_pipe_func), ('basic_encoder', le)])
     ####################################################################################
     # CREATE one_dim TRANSFORMER in order to fit between imputer and TFiDF for NLP here ###
     ####################################################################################
@@ -958,32 +994,32 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         datesize = create_ts_features_func.fit_transform(X_train[each_datecol]).shape[1]
         datesize_dict[each_datecol] = datesize
     ####################################################################################
-    ######     C A T E G O R I C A L    E N C O D E R S    H E R E ####################
-    ###### we need to create column names for one hot variables ###
+    ######     C A T E G O R I C A L    E N C O D E R S    H E R E #####################
+    ###### we need to create column names for one hot variables    #####################
     ####################################################################################
     copy_cat_vars = copy.deepcopy(catvars)
     onehot_dict = defaultdict(return_default)
     ##### This is extremely complicated logic -> be careful before modifying them!
-    if basic_encoder == 'onehot':
-        for each_catcol in copy_cat_vars:
-            onehot_dict[each_catcol] = X_train[each_catcol].unique().tolist()
-    elif basic_encoder in onehot_type_encoders:
+    if basic_encoder in onehot_type_encoders:
         for each_catcol in copy_cat_vars:
             copy_lep_one = copy.deepcopy(lep_one)
-            onehot_dict[each_catcol] = copy_lep_one.fit_transform(X_train[each_catcol], y_train).columns.tolist()
+            if combine_rare_flag:
+                onehot_dict[each_catcol] = rcc.fit_transform(X_train[each_catcol]).unique().tolist()
+            else:
+                onehot_dict[each_catcol] = copy_lep_one.fit_transform(X_train[each_catcol], y_train).columns.tolist()
     else:
         for each_catcol in copy_cat_vars:
             onehot_dict[each_catcol] = 'label'
     ### we now need to do the same for discrete variables based on encoder that is selected ##
     ##### This is extremely complicated logic -> be careful before modifying them!
     copy_discrete_vars = copy.deepcopy(discretevars)
-    if encoder == 'onehot':
-        for each_discrete in copy_discrete_vars:
-            onehot_dict[each_discrete] = X_train[each_discrete].unique().tolist()    
-    elif encoder in onehot_type_encoders:
+    if encoder in onehot_type_encoders:
         for each_discrete in copy_discrete_vars:
             copy_lep_two = copy.deepcopy(lep_two)
-            onehot_dict[each_discrete] = copy_lep_two.fit_transform(X_train[each_discrete], y_train).columns.tolist()
+            if combine_rare_flag:
+                onehot_dict[each_discrete] = rcc.fit_transform(X_train[each_discrete]).unique().tolist()
+            else:
+                onehot_dict[each_discrete] = copy_lep_two.fit_transform(X_train[each_discrete], y_train).columns.tolist()
     else:
         ### Then mark it as label encoding so it can be handled properly ####
         for each_discrete in copy_discrete_vars:
@@ -994,8 +1030,11 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     ### If you passthrough remainder, then leftovers must be included 
     #remainder = 'passthrough'
 
+    ####################################################################################
+    #############                   S C A L E R S     H E R E             ##############
     ### If you choose StandardScaler or MinMaxScaler, the integer values become stretched 
     ###  as if they are far apart when in reality they are close. So avoid it for now.
+    ####################################################################################
     if scalers=='max' or scalers == 'minmax':
         scaler = MinMaxScaler()
     elif scalers=='standard' or scalers=='std':
@@ -1010,8 +1049,12 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         ## there is no scaler ###
         scalers = ''
 
-    ### All the imputers work on groups of variables => so they need to be in the end since they return only 1D arrays
-    #### My_LabelEncoder and other fit_transformers need 2D arrays since they work on Target labels too.
+    ####################################################################################
+    #########          C R E A T I N G      P I P E L I N E      H E R E  ##############
+    ### All the imputers work on groups of variables => so they need to be in the ######
+    ###    end since they return only 1D arrays. My_LabelEncoder and other        ######
+    ###    fit_transformers need 2D arrays since they work on Target labels too.  ######
+    ####################################################################################
     init_str = 'make_column_transformer('
     #### lep_one acts as a one-hot encoder of low cardinality categorical variables ########
     middle_str0 = "".join(['(lep_one, catvars['+str(i)+']),' for i in range(len(catvars))])
@@ -1063,7 +1106,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     
     #### Chain it together in the above pipeline #########
     data_pipe = Pipeline([('scaler_pipeline', scaler_pipe), ('nlp_pipeline', nlp_pipe)])
-    
+    ############################################
     #####    S A V E   P I P E L I N E  ########
     ### save the model and or pipeline here ####
     ############################################
@@ -1119,7 +1162,8 @@ class LazyTransformer(TransformerMixin):
     y : pandas Series or DataFrame
     """
     def __init__(self, model=None, encoders='auto', scalers=None, date_to_string=False, 
-                    transform_target=False, imbalanced=False, save=False, verbose=0):
+                    transform_target=False, imbalanced=False, save=False, combine_rare = False,
+                     verbose=0):
         """
         Description of __init__
 
@@ -1138,13 +1182,14 @@ class LazyTransformer(TransformerMixin):
         self.transform_target = transform_target
         self.fitted = False
         self.save = save
+        self.combine_rare = combine_rare
 
     def get_params(self, deep=True):
         # This is to make it scikit-learn compatible ####
         return {"date_to_string": self.date_to_string, "encoders": self.encoders,
             "scalers": self.scalers, "imbalanced": self.imbalanced, 
             "verbose": self.verbose, "transform_target": self.transform_target,
-            "model": self.model}
+            "model": self.model, "combine_rare": self.combine_rare,}
 
     def set_params(self, **parameters):
         for parameter, value in parameters.items():
@@ -1175,16 +1220,27 @@ class LazyTransformer(TransformerMixin):
             self.y_index = y.index
         #X = X.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
         y = copy.deepcopy(y)
+        if y.ndim >= 2:
+            modeltype, multi_label = analyze_problem_type(y, target=y.columns.tolist(), verbose=0)
+        else:
+            modeltype, multi_label = analyze_problem_type(y, target=y.name, verbose=0)
+        if modeltype == 'Regression' and self.transform_target:
+            print("    Regression models don't need targets to be transformed to numeric...")                 
+            self.transform_target = False
+        if modeltype == 'Regression' and self.imbalanced:
+            print("    Regression models don't need imbalanced flag set to True...")                 
+            self.imbalanced = False
+        ### if there is a flag and it is a classification, do it ###
         if self.transform_target:
-            ### Non-scikit-learn models need numeric targets. 
             ### Hence YTransformer converts them before feeding model
-            yformer = YTransformer()
+            self.yformer = YTransformer()
         #### This is where we build pipelines for X and y #############
         start_time = time.time()
         if self.model is not None:
             ### If a model is given, then add it to pipeline and fit it ###
             data_pipe = make_simple_pipeline(X, y, encoders=self.encoders, scalers=self.scalers,
-                date_to_string=self.date_to_string, save_flag = self.save, verbose=self.verbose)
+                date_to_string=self.date_to_string, save_flag = self.save, 
+                combine_rare_flag=self.combine_rare, verbose=self.verbose)
             
             ### There is no YTransformer in this pipeline so targets must be single label only ##
             model_name = str(self.model).split("(")[0]            
@@ -1212,8 +1268,8 @@ class LazyTransformer(TransformerMixin):
                 if self.transform_target:
                     if y is not None:
                         self.y_index = y.index
-                    self.yformer = yformer.fit(X,y)
-                    yt = self.yformer.transform(X, y)
+                    self.yformer.fit(y)
+                    yt = self.yformer.transform(y)
                     if y is not None:
                         yt.index = self.y_index
                     self.model = ml_pipe.fit(X,yt)
@@ -1227,13 +1283,14 @@ class LazyTransformer(TransformerMixin):
         else:
             ### if there is no given model, just use the data_pipeline ##
             data_pipe = make_simple_pipeline(X, y, encoders=self.encoders, scalers=self.scalers,
-                date_to_string=self.date_to_string, save_flag = self.save, verbose=self.verbose)
+                date_to_string=self.date_to_string, save_flag = self.save, 
+                combine_rare_flag=self.combine_rare, verbose=self.verbose)
             print('No model input given...')
             #### here we check if we should add a model to the pipeline 
             print('X and y Transformer Pipeline created...')
             if self.transform_target:
-                self.yformer = yformer.fit(X,y)
-                yt = self.yformer.transform(X, y)
+                self.yformer.fit(y)
+                yt = self.yformer.transform(y)
                 if y is not None:
                     yt.index = self.y_index
                 self.xformer = data_pipe.fit(X,yt)
@@ -1294,7 +1351,7 @@ class LazyTransformer(TransformerMixin):
             if self.transform_target:
                 if y is not None:
                     self.y_index = y.index
-                y_enc = self.yformer.transform(X, y)
+                y_enc = self.yformer.transform(y)
                 if y is not None:
                     y_enc.index = self.y_index
             else:
@@ -1328,7 +1385,7 @@ class LazyTransformer(TransformerMixin):
         X_trans =  self.xformer.transform(X)
         X_trans.index = self.X_index
         if self.transform_target:
-            y_trans = self.yformer.transform(X,y)
+            y_trans = self.yformer.transform(y)
             if y is not None:
                 y_trans.index = self.y_index
         else:
@@ -1481,8 +1538,8 @@ class LazyTransformer(TransformerMixin):
         print('    returning a new LazyTransformer pipeline that contains the best model trained on your train dataset!')
         return newpipe
 ####################################################################################
-#TransformerMixin, BaseEstimator
-class YTransformer(BaseEstimator, ClassifierMixin):
+# This is needed to make this a regular transformer ###
+class YTransformer():
     def __init__(self, transformers={}, targets=[]):
         # store the number of dimension of the target to predict an array of
         # similar shape at predict
@@ -1498,7 +1555,7 @@ class YTransformer(BaseEstimator, ClassifierMixin):
             setattr(self, parameter, value)
         return self
 
-    def fit(self, X, y):
+    def fit(self, y):
         """Fit the model according to the given training data"""        
         # transformers are designed to modify X which is 2d dimensional, we
         # need to modify y accordingly.
@@ -1521,11 +1578,11 @@ class YTransformer(BaseEstimator, ClassifierMixin):
             self.transformers[each_target] = lb
         return self
     
-    def transform(self, X, y=None):
+    def transform(self, y):
         target_len = len(self.targets) - 1
         for i, each_target in enumerate(self.targets):
             if y is None:
-                return X
+                return y
             else:
                 if isinstance(y, pd.Series):
                     y = pd.DataFrame(y)
@@ -1542,12 +1599,10 @@ class YTransformer(BaseEstimator, ClassifierMixin):
                         continue
                 return y_trans
     
-    def fit_transform(self, X, y=None):
-        ### Since X for yT in a pipeline is sent as X, we need to switch X and y this way ##
-        
-        self.fit(X, y)
+    def fit_transform(self, y=None):
+        self.fit(y)
         for each_target in self.targets:
-            y_trans =  self.transformers[each_target].transform(X, y)
+            y_trans =  self.transformers[each_target].transform(y)
         return y_trans
     
     def inverse_transform(self, y):
@@ -1570,10 +1625,92 @@ class YTransformer(BaseEstimator, ClassifierMixin):
                 y_trans[each_target] = y_t
         return y_trans
     
-    def predict(self, X, y=None, **fit_params):
+    def predict(self, y=None, **fit_params):
         #print('There is no predict function in Label Encoder. Returning...')
         return y
+##############################################################################
+from collections import defaultdict
+# This is needed to make this a regular transformer ###
+from sklearn.base import BaseEstimator, TransformerMixin 
+class Rare_Class_Combiner_Pipe(BaseEstimator, TransformerMixin ):
+    """
+    This is the pipeline version of rare class combiner used in sklearn pipelines.
+    """
+    def __init__(self, transformers={}  ):
+        # store the number of dimension of the target to predict an array of
+        # similar shape at predict
+        self.transformers =  transformers
+        self.zero_low_counts = defaultdict(bool)
+        
+    def get_params(self, deep=True):
+        # This is to make it scikit-learn compatible ####
+        return {"transformers": self.transformers}
 
+    def set_params(self, **parameters):
+        for parameter, value in parameters.items():
+            setattr(self, parameter, value)
+        return self
+
+    def fit(self, X, y=None, **fit_params):
+        """Fit the model according to the given training data"""        
+        # transformers need a default name for rare categories ##
+        def return_cat_value():
+            return "rare_categories"
+        ### In this case X itself will only be a pd.Series ###
+        each_catvar = X.name
+        #### if it is already a list, then leave it as is ###
+        self.transformers[each_catvar] = defaultdict(return_cat_value)
+        ### Then find the unique categories in the column ###
+        self.transformers[each_catvar] = dict(zip(X.unique(), X.unique()))
+        low_counts = pd.DataFrame(X).apply(lambda x: x.value_counts()[
+                (x.value_counts()<=(0.01*x.shape[0])).values].index).values.ravel()
+        
+        if len(low_counts) == 0:
+            self.zero_low_counts[each_catvar] = True
+        else:
+            self.zero_low_counts[each_catvar] = False
+        for each_low in low_counts:
+            self.transformers[each_catvar].update({each_low:'rare_categories'})
+        return self
+    
+    def transform(self, X, y=None, **fit_params):
+        each_catvar = X.name
+        if self.zero_low_counts[each_catvar]:
+            pass
+        else:
+            X = X.map(self.transformers[each_catvar])
+            ### simply fill in the missing values with the word "missing" ##
+            X = X.fillna('missing',inplace=False)
+        return X
+
+    def fit_transform(self, X, y=None, **fit_params):
+        ### Since X for yT in a pipeline is sent as X, we need to switch X and y this way ##
+        self.fit(X, y)
+        each_catvar = X.name
+        if self.zero_low_counts[each_catvar]:
+            pass
+        else:
+            X = X.map(self.transformers[each_catvar])
+            ### simply fill in the missing values with the word "missing" ##
+            X = X.fillna('missing',inplace=False)
+        return X
+
+    def inverse_transform(self, X, **fit_params):
+        ### One problem with this approach is that you have combined categories into one.
+        ###   You cannot uncombine them since they no longer have a unique category. 
+        ###   You will get back the last transformed category when you inverse transform it.
+        each_catvar = X.name
+        transformer_ = self.transformers[each_catvar]
+        reverse_transformer_ = dict([(y,x) for (x,y) in transformer_.items()])
+        if self.zero_low_counts[each_catvar]:
+            pass
+        else:
+            X[each_catvar] = X[each_catvar].map(reverse_transformer_).values
+        return X
+    
+    def predict(self, X, y=None, **fit_params):
+        #print('There is no predict function in Rare class combiner. Returning...')
+        return X
 ##############################################################################
 import copy
 def EDA_find_remove_columns_with_infinity(df, remove=False):
@@ -1626,10 +1763,10 @@ def check_if_GPU_exists():
 
 ###############################################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.43'
+version_number =  '0.50'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
-        transform_target=False, imbalanced=False, verbose=0)
+        transform_target=False, imbalanced=False, combine_rare=False, verbose=0)
     ### if you are not using a model in pipeline, you must use fit and transform ###
         X_trainm, y_trainm = lazy.fit_transform(X_train, y_train)
         X_testm = lazy.transform(X_test)
