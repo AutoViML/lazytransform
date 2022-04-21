@@ -1004,7 +1004,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         for each_catcol in copy_cat_vars:
             copy_lep_one = copy.deepcopy(lep_one)
             if combine_rare_flag:
-                onehot_dict[each_catcol] = rcc.fit_transform(X_train[each_catcol]).unique().tolist()
+                rcct = Rare_Class_Combiner_Pipe()
+                onehot_dict[each_catcol] = rcct.fit_transform(X_train[each_catcol]).unique().tolist()
             else:
                 onehot_dict[each_catcol] = copy_lep_one.fit_transform(X_train[each_catcol], y_train).columns.tolist()
     else:
@@ -1017,6 +1018,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         for each_discrete in copy_discrete_vars:
             copy_lep_two = copy.deepcopy(lep_two)
             if combine_rare_flag:
+                rcct = Rare_Class_Combiner_Pipe()
                 onehot_dict[each_discrete] = rcc.fit_transform(X_train[each_discrete]).unique().tolist()
             else:
                 onehot_dict[each_discrete] = copy_lep_two.fit_transform(X_train[each_discrete], y_train).columns.tolist()
@@ -1270,6 +1272,8 @@ class LazyTransformer(TransformerMixin):
                         self.y_index = y.index
                     self.yformer.fit(y)
                     yt = self.yformer.transform(y)
+                    print('    transformed target from object type to numeric')
+
                     if y is not None:
                         yt.index = self.y_index
                     self.model = ml_pipe.fit(X,yt)
@@ -1291,6 +1295,7 @@ class LazyTransformer(TransformerMixin):
             if self.transform_target:
                 self.yformer.fit(y)
                 yt = self.yformer.transform(y)
+                print('    transformed target from object type to numeric')
                 if y is not None:
                     yt.index = self.y_index
                 self.xformer = data_pipe.fit(X,yt)
@@ -1539,7 +1544,7 @@ class LazyTransformer(TransformerMixin):
         return newpipe
 ####################################################################################
 # This is needed to make this a regular transformer ###
-class YTransformer():
+class YTransformer(TransformerMixin):
     def __init__(self, transformers={}, targets=[]):
         # store the number of dimension of the target to predict an array of
         # similar shape at predict
@@ -1611,7 +1616,7 @@ class YTransformer():
                 transformer_ = self.transformers[each_target]
                 if isinstance(y, pd.Series):
                     y = pd.DataFrame(y, columns=self.targets)
-                if isinstance(y, np.ndarray):
+                elif isinstance(y, np.ndarray):
                     y = pd.DataFrame(y, columns=self.targets)
                 else:
                     ### if it is a dataframe then leave it alone ##
