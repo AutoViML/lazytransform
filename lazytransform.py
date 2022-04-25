@@ -528,7 +528,7 @@ def create_column_names(Xt, nlpvars=[], catvars=[], discretevars=[], numvars=[],
 import random
 import collections
 random.seed(10)
-def make_unique_columns(cols):
+def make_column_names_unique(cols):
     ser = pd.Series(cols)
     ### This function removes all special chars from a list ###
     remove_special_chars =  lambda x:re.sub('[^A-Za-z0-9_]+', '', x)
@@ -544,6 +544,7 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], numv
     ### Once you get back names of one hot encoded columns, change the column names
     cols_cat = []
     x_cols = []
+    
     for each_cat in catvars:
         categs = onehot_dict[each_cat]
         if isinstance(categs, str):
@@ -557,7 +558,7 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], numv
         else:
             cat_add = [each_cat+'_'+str(categs[i]) for i in range(len(categs))]
             cols_cat += cat_add
-    cols_cat = make_unique_columns(cols_cat)
+    cols_cat = make_column_names_unique(cols_cat)
     
     cols_discrete = []
     discrete_add = []
@@ -579,7 +580,7 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], numv
         except:
             ### if there is no new var to be created, just use the existing discrete vars itself ###
             cols_discrete.append(each_discrete)
-    cols_discrete = make_unique_columns(cols_discrete)
+    cols_discrete = make_column_names_unique(cols_discrete)
     
     cols_nlp = []
     nlp_add = []
@@ -697,7 +698,6 @@ import copy
 import time
 from dateutil.relativedelta import relativedelta
 from datetime import date
-import pdb
 def create_ts_features(df):
     """
     This takes in input a dataframe and a date variable.
@@ -959,18 +959,23 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     ####################################################################################
     one_dim = Make2D(imp_missing)
     remove_special_chars =  lambda x:re.sub('[^A-Za-z0-9_]+', ' ', x)
+    ## number of components in SVD
+    top_n = int(max(2, 5*np.log2(X_train.shape[0])))
+    svd_n_iter = int(max(30, top_n*0.1))
+    if len(nlpvars) > 0 and verbose:
+        print('    %d components chosen for TruncatedSVD(n_iter=%d) after TFIDF' %(top_n, svd_n_iter))
     if X_train.shape[0] >= 100000:
+        tiffd = TfidfVectorizer(strip_accents='unicode',max_features=6000, preprocessor=remove_special_chars)
+    elif X_train.shape[0] >= 10000:
         #tiffd = CountVectorizer(strip_accents='unicode',max_features=1000)
         tiffd = TfidfVectorizer(strip_accents='unicode',max_features=3000, preprocessor=remove_special_chars)
-        top_n = 100 ## number of components in SVD
         #tiffd = MyTiff(strip_accents='unicode',max_features=300, min_df=0.01)
     else:
         #vect = CountVectorizer(strip_accents='unicode',max_features=100)
         tiffd = TfidfVectorizer(strip_accents='unicode',max_features=1000, preprocessor=remove_special_chars)
-        top_n = 10 ## number of components in SVD
         #tiffd = MyTiff(strip_accents='unicode',max_features=300, min_df=0.01)
     ### create a new pipeline with filling with constant missing ##
-    tsvd = TruncatedSVD(n_components=top_n, n_iter=10, random_state=3)
+    tsvd = TruncatedSVD(n_components=top_n, n_iter=svd_n_iter, random_state=3)
     vect = Pipeline([('make_one_dim', one_dim), ('make_tfidf_pipeline', tiffd), ('truncated_svd', tsvd)])
     #vect = make_pipeline(one_dim, tiffd, tsvd)
     ### Similarly you need to create a function that converts all NLP columns to string before feeding to CountVectorizer
@@ -995,7 +1000,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         datesize_dict[each_datecol] = datesize
     ####################################################################################
     ######     C A T E G O R I C A L    E N C O D E R S    H E R E #####################
-    ###### we need to create column names for one hot variables    #####################
+    ######     we need to create unique column names for one hot variables    ##########
     ####################################################################################
     copy_cat_vars = copy.deepcopy(catvars)
     onehot_dict = defaultdict(return_default)
@@ -1005,12 +1010,20 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
             copy_lep_one = copy.deepcopy(lep_one)
             if combine_rare_flag:
                 rcct = Rare_Class_Combiner_Pipe()
-                onehot_dict[each_catcol] = rcct.fit_transform(X_train[each_catcol]).unique().tolist()
+                unique_cols = make_column_names_unique(rcct.fit_transform(X_train[each_catcol]).unique().tolist())
+                onehot_dict[each_catcol] = unique_cols
             else:
-                onehot_dict[each_catcol] = copy_lep_one.fit_transform(X_train[each_catcol], y_train).columns.tolist()
+                if basic_encoder == 'onehot':
+                    unique_cols = X_train[each_catcol].unique().tolist()
+                    unique_cols = np.where(unique_cols==np.nan, 'missing', unique_cols)
+                    unique_cols = make_column_names_unique(unique_cols)
+                    onehot_dict[each_catcol] = unique_cols
+                else:
+                    onehot_dict[each_catcol] = copy_lep_one.fit_transform(X_train[each_catcol], y_train).columns.tolist()
     else:
         for each_catcol in copy_cat_vars:
             onehot_dict[each_catcol] = 'label'
+    
     ### we now need to do the same for discrete variables based on encoder that is selected ##
     ##### This is extremely complicated logic -> be careful before modifying them!
     copy_discrete_vars = copy.deepcopy(discretevars)
@@ -1019,13 +1032,21 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
             copy_lep_two = copy.deepcopy(lep_two)
             if combine_rare_flag:
                 rcct = Rare_Class_Combiner_Pipe()
-                onehot_dict[each_discrete] = rcc.fit_transform(X_train[each_discrete]).unique().tolist()
+                unique_cols = make_column_names_unique(rcct.fit_transform(X_train[each_discrete]).unique().tolist())
+                onehot_dict[each_discrete] = unique_cols
             else:
-                onehot_dict[each_discrete] = copy_lep_two.fit_transform(X_train[each_discrete], y_train).columns.tolist()
+                if encoder == 'onehot':
+                    unique_cols = X_train[each_discrete].unique().tolist()
+                    unique_cols = np.where(unique_cols==np.nan, 'missing', unique_cols)
+                    unique_cols = make_column_names_unique(unique_cols)
+                    onehot_dict[each_discrete] = unique_cols
+                else:
+                    onehot_dict[each_discrete] = copy_lep_two.fit_transform(X_train[each_discrete], y_train).columns.tolist()
     else:
         ### Then mark it as label encoding so it can be handled properly ####
         for each_discrete in copy_discrete_vars:
             onehot_dict[each_discrete] = 'label'
+    
     ### if you drop remainder, then leftovervars is not needed.
     remainder = 'drop'
     
@@ -1751,7 +1772,6 @@ import time
 import copy
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from collections import Counter, defaultdict
-import pdb
 from tqdm.notebook import tqdm
 from pathlib import Path
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
@@ -1768,7 +1788,7 @@ def check_if_GPU_exists():
 
 ###############################################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.50'
+version_number =  '0.51'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, combine_rare=False, verbose=0)
