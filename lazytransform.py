@@ -817,6 +817,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     if isinstance(X_train, np.ndarray):
         print('X_train input must be a dataframe since we use column names to build data pipelines. Returning')
         return {}, {}
+    
     df = pd.concat([X_train, y_train], axis=1)
     if isinstance(y_train, pd.Series):
         target = y_train.name
@@ -1202,6 +1203,8 @@ class LazyTransformer(TransformerMixin):
         self.imbalanced = imbalanced
         self.verbose = verbose
         self.model = model
+        if not self.model:
+            self.model = None
         self.transform_target = transform_target
         self.fitted = False
         self.save = save
@@ -1242,6 +1245,7 @@ class LazyTransformer(TransformerMixin):
         if y is not None:
             self.y_index = y.index
         #X = X.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
+        
         y = copy.deepcopy(y)
         if y.ndim >= 2:
             modeltype, multi_label = analyze_problem_type(y, target=y.columns.tolist(), verbose=0)
@@ -1271,7 +1275,16 @@ class LazyTransformer(TransformerMixin):
                 ### In some cases, if y is a DataFrame with one column also, you get these situations.
                 if y.shape[1] == 1:
                     ## In this case, y has only one column hence, you can use a model pipeline ##
-                    ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
+                    if model_name == '': 
+                        print('No model name specified')
+                        self.model = None
+                        ml_pipe = Pipeline([('data_pipeline', data_pipe),])
+                    else:
+                        ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
+                elif model_name == '': 
+                    print('No model name specified')
+                    self.model = None
+                    ml_pipe = Pipeline([('data_pipeline', data_pipe),])
                 elif model_name not in ['MultiOutputClassifier','MultiOutputRegressor']:
                     ### In this case, y has more than 1 column, hence if it is not a multioutput model, give error
                     print('    Alert: Multi-Label problem - make sure your input model can do MultiOutput!')
@@ -1297,9 +1310,17 @@ class LazyTransformer(TransformerMixin):
 
                     if y is not None:
                         yt.index = self.y_index
-                    self.model = ml_pipe.fit(X,yt)
+                    ### Make sure you leave self.model as None when there is no model ### 
+                    if model_name == '': 
+                        self.model = None
+                    else:
+                        self.model = ml_pipe.fit(X,yt)
                 else:
-                    self.model = ml_pipe.fit(X,y)
+                    ### Make sure you leave self.model as None when there is no model ### 
+                    if model_name == '': 
+                        self.model = None
+                    else:
+                        self.model = ml_pipe.fit(X,y)
             except Exception as e:
                 print('Erroring due to %s: There may be something wrong with your data types or inputs.' %e)
                 return self
