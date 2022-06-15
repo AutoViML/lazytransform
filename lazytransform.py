@@ -69,7 +69,6 @@ from category_encoders.quantile_encoder import QuantileEncoder
 from category_encoders.quantile_encoder import SummaryEncoder
 from category_encoders import OneHotEncoder
 from imblearn.over_sampling import SMOTE, BorderlineSMOTE, SMOTENC
-import imblearn
 from sklearn.pipeline import make_pipeline, Pipeline
 #from sklearn.preprocessing import OneHotEncoder
 #########################################################
@@ -532,6 +531,7 @@ def make_column_names_unique(cols):
     ser = pd.Series(cols)
     ### This function removes all special chars from a list ###
     remove_special_chars =  lambda x:re.sub('[^A-Za-z0-9_]+', '', x)
+    
     newls = ser.map(remove_special_chars).values.tolist()
     ### there may be duplicates in this list - we need to make them unique by randomly adding strings to name ##
     seen = [item for item, count in collections.Counter(newls).items() if count > 1]
@@ -558,6 +558,7 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], numv
         else:
             cat_add = [each_cat+'_'+str(categs[i]) for i in range(len(categs))]
             cols_cat += cat_add
+    
     cols_cat = make_column_names_unique(cols_cat)
     
     cols_discrete = []
@@ -1006,17 +1007,21 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     copy_cat_vars = copy.deepcopy(catvars)
     onehot_dict = defaultdict(return_default)
     ##### This is extremely complicated logic -> be careful before modifying them!
+    
     if basic_encoder in onehot_type_encoders:
         for each_catcol in copy_cat_vars:
             copy_lep_one = copy.deepcopy(lep_one)
             if combine_rare_flag:
                 rcct = Rare_Class_Combiner_Pipe()
                 unique_cols = make_column_names_unique(rcct.fit_transform(X_train[each_catcol]).unique().tolist())
+                unique_cols = [str(x) for x in unique_cols] ### just make them all strings
                 onehot_dict[each_catcol] = unique_cols
             else:
                 if basic_encoder == 'onehot':
                     unique_cols = X_train[each_catcol].unique().tolist()
-                    unique_cols = np.where(unique_cols==np.nan, 'missing', unique_cols)
+                    #unique_cols = np.where(unique_cols==np.nan, 'missing', unique_cols)
+                    #unique_cols = np.where(unique_cols == None, 'missing', unique_cols)
+                    unique_cols = [str(x) for x in unique_cols] ### just make them all strings
                     unique_cols = make_column_names_unique(unique_cols)
                     onehot_dict[each_catcol] = unique_cols
                 else:
@@ -1024,6 +1029,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     else:
         for each_catcol in copy_cat_vars:
             onehot_dict[each_catcol] = 'label'
+    
     
     ### we now need to do the same for discrete variables based on encoder that is selected ##
     ##### This is extremely complicated logic -> be careful before modifying them!
@@ -1034,11 +1040,13 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
             if combine_rare_flag:
                 rcct = Rare_Class_Combiner_Pipe()
                 unique_cols = make_column_names_unique(rcct.fit_transform(X_train[each_discrete]).unique().tolist())
+                unique_cols = [str(x) for x in unique_cols] ### just make them all strings
                 onehot_dict[each_discrete] = unique_cols
             else:
                 if encoder == 'onehot':
                     unique_cols = X_train[each_discrete].unique().tolist()
-                    unique_cols = np.where(unique_cols==np.nan, 'missing', unique_cols)
+                    #unique_cols = np.where(unique_cols==np.nan, 'missing', unique_cols)
+                    unique_cols = [str(x) for x in unique_cols] ### just make them all strings
                     unique_cols = make_column_names_unique(unique_cols)
                     onehot_dict[each_discrete] = unique_cols
                 else:
@@ -1182,8 +1190,42 @@ class LazyTransformer(TransformerMixin):
     ################################################################
     Parameters
     ----------
-    X : pandas DataFrame 
-    y : pandas Series or DataFrame
+    X : pandas DataFrame - No numpy arrays are allowed since we need columns.
+    y : pandas Series or DataFrame - no numpy arrays are allowed again.
+    model : default None. You can send your model to train with the data. 
+            Must be an sklearn or multioutput model. You can try other models
+            but I have not tested it. It might work.
+    encoders : default is "auto". You can leave this as auto and it will 
+            automatically choose the right encoder for your dataset. It will
+            use one-hot encoding for low cardinality vars and label encoding
+            for high cardinality vars. You can also send either one or two encoders
+            of your own. It must be a string consisting of one of the following:
+            'onehot','ordinal','hashing','hash','count','catboost','target','glm',
+             'glmm','sum','woe','bdc','bde','loo','base','james','jamesstein',
+             'helmert','quantile','summary', 'label','auto'
+    scalers : default is None. You can send one of the following strings:
+            'std', 'standard', 'minmax', 'max', 'robust', 'maxabs'
+    date_to_string : default is False. If True it means date columns will be
+            converted to pandas datetime vars and meaningful features will be
+            extracted such as dayoftheweek, etc. If False, datetime columns
+            will be treated as string variables and used as cat vars or NLP vars.
+    transform_target : default is False. If True , target column(s) will be 
+            converted to numbers and treated as numeric. If False, target(s)
+            will be left as they are and not converted.
+    imbalanced : default is False. If True, we will try SMOTE if no model is input.
+            If a model is input, then it will be wrapped in a special Classifier
+            called SuloClassifier which is a high performance stacking model that
+            will work on your imbalanced data set. If False, your data will be 
+            left as is and nothing will be done to it.
+    save : default is False. If True, it will save the data and model pipeline in a 
+            pickle file in the current working directory under "LazyTransformer_pipeline.pkl"
+            file name.
+    combine_rare : default is False. If True, it will combine rare categories in your 
+            categorical vars and make them in to a single "rare_categories" class. 
+            If False, nothing will be done to your categorical vars.
+    verbose: If 0, not much will be printed on the terminal. If 1 or 2, lots of 
+            steps will be printed on the terminal.
+
     """
     def __init__(self, model=None, encoders='auto', scalers=None, date_to_string=False, 
                     transform_target=False, imbalanced=False, save=False, combine_rare = False,
@@ -1381,6 +1423,7 @@ class LazyTransformer(TransformerMixin):
         y = copy.deepcopy(y)
         self.X_index = X.index
         start_time = time.time()
+
         if y is None and self.fitted:
             X_enc = self.xformer.transform(X)
             X_enc.index = self.X_index
@@ -1431,10 +1474,9 @@ class LazyTransformer(TransformerMixin):
         self.fit(X,y)
         X_trans =  self.xformer.transform(X)
         X_trans.index = self.X_index
+        ### Here you can straight away fit and transform y ###
         if self.transform_target:
-            y_trans = self.yformer.transform(y)
-            if y is not None:
-                y_trans.index = self.y_index
+            y_trans = self.yformer.fit_transform(y)
         else:
             y_trans = y
         #### Now we need to check if imbalanced flag is set ###
@@ -1627,29 +1669,27 @@ class YTransformer(TransformerMixin):
     
     def transform(self, y):
         target_len = len(self.targets) - 1
-        for i, each_target in enumerate(self.targets):
-            if y is None:
-                return y
-            else:
-                if isinstance(y, pd.Series):
-                    y = pd.DataFrame(y)
-                if i == 0:
-                    y_t = self.transformers[each_target].transform(y.iloc[:,i])
-                    y_trans = pd.Series(y_t,name=each_target)
-                else:
-                    y_t = self.transformers[each_target].transform(y.iloc[:,i])
-                    y_trans = pd.DataFrame(y_trans)
-                    y_trans[each_target] = y_t
-                    if i == target_len:
-                        return y_trans
-                    else:
-                        continue
-                return y_trans
+        if y is None:
+            return y
+        else:
+            if isinstance(y, pd.Series):
+                y = pd.DataFrame(y)
+            y_trans = copy.deepcopy(y)
+            for each_target in self.targets:
+                y_trans[each_target] = self.transformers[each_target].transform(y[each_target])
+            return y_trans
     
     def fit_transform(self, y=None):
         self.fit(y)
-        for each_target in self.targets:
-            y_trans =  self.transformers[each_target].transform(y)
+        if isinstance(y, pd.Series):
+            y_trans = self.transformers[self.targets[0]].transform(y)
+        elif isinstance(y, pd.DataFrame):
+            y_trans = copy.deepcopy(y)
+            for each_target in self.targets:
+                y_trans[each_target] = self.transformers[each_target].transform(y[each_target])
+        else:
+            print('Error: Cannot transform numpy arrays. Returning')
+            return y
         return y_trans
     
     def inverse_transform(self, y):
@@ -1809,10 +1849,10 @@ def check_if_GPU_exists():
 
 ###############################################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.51'
+version_number =  '0.60'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
-        transform_target=False, imbalanced=False, combine_rare=False, verbose=0)
+        transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
     ### if you are not using a model in pipeline, you must use fit and transform ###
         X_trainm, y_trainm = lazy.fit_transform(X_train, y_train)
         X_testm = lazy.transform(X_test)
