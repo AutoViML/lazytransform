@@ -486,6 +486,7 @@ def convert_all_object_columns_to_numeric(train, test=""):
 ################################################################################################
 def drop_second_col(Xt): 
     ### This deletes the 2nd column. Hence col number=1 and axis=1 ###
+    
     return np.delete(Xt, 1, 1)
 
 def change_col_to_string(Xt): 
@@ -513,16 +514,21 @@ def create_column_names(Xt, nlpvars=[], catvars=[], discretevars=[], numvars=[],
         colsize = datesize_dict[each_date]
         date_add = [each_date+'_'+str(x) for x in range(colsize)]
         cols_date += date_add
-    cols_names = catvars+cols_nlp+cols_date+numvars
-    if nlpvars:
-        ### Xt is a Sparse matrix array, we need to convert it  to dense array ##
-        if scipy.sparse.issparse(Xt):
-            return pd.DataFrame(Xt.toarray(), columns = cols_names)
-        else:
-            return pd.DataFrame(Xt, columns = cols_names)            
-    else:
-        ### Xt is already a dense array, no need to convert it ##
-        return pd.DataFrame(Xt, columns = cols_names)
+
+    #### this is where we put all the column names together #######
+    cols_names = catvars
+    num_vars = cols_nlp+cols_date+numvars
+    num_len = len(num_vars)
+
+    ### Xt is a Sparse matrix array, we need to convert it  to dense array ##
+    if scipy.sparse.issparse(Xt):
+        Xt = Xt.toarray()
+
+    ### Xt is already a dense array, no need to convert it ##
+    Xint = pd.DataFrame(Xt[:,:-num_len], columns = cols_names, dtype=np.int16)
+    Xnum = pd.DataFrame(Xt[:, -num_len:], columns = num_vars, dtype=np.float32)
+    df = pd.concat([X_int, X_num], axis=1)
+    return df
 #############################################################################################################
 import random
 import collections
@@ -596,15 +602,26 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], numv
         colsize = datesize_dict[each_date]
         date_add = [each_date+'_'+str(x) for x in range(colsize)]
         cols_date += date_add
-    #### this is where we put all the column names together #######
-    cols_names = cols_cat+cols_discrete+cols_nlp+cols_date+numvars
+    ### Remember don't combine the next 2 lines into one. That will be a disaster.
+    ### Pandas infers data types autmatically and they always are float64. So
+    ###  to avoid that I have split the data into two or three types 
+    cols_names = cols_cat+cols_discrete
+    num_vars = cols_nlp+cols_date+numvars
+    num_len = len(num_vars)
     
     ### Xt is a Sparse matrix array, we need to convert it  to dense array ##
     if scipy.sparse.issparse(Xt):
-        return pd.DataFrame(Xt.toarray(), columns = cols_names)
-    else:
-        ### Xt is already a dense array, no need to convert it ##
-        return pd.DataFrame(Xt, columns = cols_names)
+        Xt = Xt.toarray()
+    ### Xt is already a dense array, no need to convert it ##
+    ### Remember don't combine the next 2 lines into one. That will be a disaster.
+    ### Pandas infers data types autmatically and they always are float64. So
+    ###  to avoid that I have split the data into two or three types 
+    
+    Xint = pd.DataFrame(Xt[:,:-num_len], columns = cols_names, dtype=np.int16)
+    Xnum = pd.DataFrame(Xt[:,-num_len:], columns = num_vars, dtype=np.float32)
+    #### this is where we put all the column names together #######
+    df = pd.concat([Xint, Xnum], axis=1)
+    return df
 ######################################################################################
 def find_remove_duplicates(list_of_values):
     """
@@ -618,10 +635,9 @@ def find_remove_duplicates(list_of_values):
             seen.add(value)
     return output
 
-def convert_ce_to_pipe(Xt):
-
+def convert_ce_to_pipe(Xt):    
     ### This converts a series to a dataframe to make category encoders work in sklearn pipelines ###
-    if Xt.dtype != object:
+    if str(Xt.dtype) == 'category':
         Xtx = Xt.cat.rename_categories(str).values.tolist()
         return pd.DataFrame(Xtx, columns=[Xt.name])
     else:
@@ -1138,6 +1154,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     
     #### Chain it together in the above pipeline #########
     data_pipe = Pipeline([('scaler_pipeline', scaler_pipe), ('nlp_pipeline', nlp_pipe)])
+    
     ############################################
     #####    S A V E   P I P E L I N E  ########
     ### save the model and or pipeline here ####
@@ -1422,8 +1439,8 @@ class LazyTransformer(TransformerMixin):
         X = copy.deepcopy(X)
         y = copy.deepcopy(y)
         self.X_index = X.index
+        
         start_time = time.time()
-
         if y is None and self.fitted:
             X_enc = self.xformer.transform(X)
             X_enc.index = self.X_index
@@ -1849,7 +1866,7 @@ def check_if_GPU_exists():
 
 ###############################################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.60'
+version_number =  '0.61'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
