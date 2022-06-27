@@ -21,7 +21,7 @@ Automatically transform all categorical, date-time, NLP variables in your data s
 `lazytransform` is a new python library for automatically transforming your entire dataset to numeric format using category encoders, NLP text vectorizers and pandas date time processing functions. All in a single line of code!
 
 ## Uses
-`lazytransform` has two important uses in the Data Science process. It can be used in Feature Engg to transform features or add features (see API below). It can also be used to train and evaluate models in MLOps pipelines with multiple models being trained simultaneusly using the same train/test split and the same feature engg strategies. This way there is absolutely zero or minimal data leakage. 
+`lazytransform` has two important uses in the Data Science process. It can be used in Feature Engg to transform features or add features (see API below). It can also be used in MLOps to train and evaluate models in data pipelines with multiple models being trained simultaneusly using the same train/test split and the same feature engg steps. This ensures that there is absolutely zero or minimal data leakage in your MLOps pipelines.
 
 ### 1.  Using lazytransform as a simple pandas data transformation pipeline 
 
@@ -31,7 +31,7 @@ Automatically transform all categorical, date-time, NLP variables in your data s
 
 ### 2.  Using lazytransform as a sklearn pipeline with sklearn models or XGBoost or LightGBM models
 
-<p>The second method is a great way to create an entire data transform and model training pipeline with absolutely zero data leakage. `lazytransform` allows you to send in a model object (only the following are supported) and it will automatically transform, create new features and train a model using sklearn pipelines. <a href="https://github.com/AutoViML/lazytransform/blob/main/Featurewiz_LazyTransform_Demo2.ipynb">This method can be seen as follows</a>:<br>
+<p>The second method is a great way to create an entire data transform and model training pipeline with absolutely no data leakage. `lazytransform` allows you to send in a model object (only the following are supported) and it will automatically transform, create new features and train a model using sklearn pipelines. <a href="https://github.com/AutoViML/lazytransform/blob/main/Featurewiz_LazyTransform_Demo2.ipynb">This method can be seen as follows</a>:<br>
 
 <a href="https://ibb.co/T1WNhzT"><img src="https://i.ibb.co/0KszJPX/lazy-code2.png" alt="lazy-code2" border="0"></a>
 
@@ -55,7 +55,7 @@ However, you must install and import those models on your own and define them as
 
 **Prerequsites:**
 <ol>
-<li><b>lazytransform is built using pandas, numpy, scikit-learn, category_encoders and imb-learn libraries.</b> It should run on most Python 3 Anaconda installations without additional installs. You won't have to import any special libraries other than "imb-learn" and "category_encoders".</li>
+<li><b>lazytransform is built using pandas, numpy, scikit-learn, category_encoders and imbalanced-learn libraries.</b> It should run on most Python3 Anaconda installations without additional installs. You won't have to import any special libraries other than "imbalanced-learn" and "category_encoders".</li>
 </ol>
 The best method to install lazytransform is to use conda:<p>
 
@@ -68,7 +68,7 @@ The second best installation method is to use "pip install".
 ```
 pip install lazytransform 
 ```
-Alert! When using Colab or Kaggle Notebooks, you must slightly modify installation. If you don't do this, you will get weird errors in those platforms!
+Alert! When using Colab or Kaggle Notebooks, you must use a slightly modify installation process below. If you don't do this, you will get weird errors in those platforms!
 
 ```
 pip install lazytransform --ignore-installed --no-deps
@@ -173,7 +173,7 @@ Once you import it, you can define the object by giving several options such as:
 - `date_to_string`: default is False. If you want to use date variables as strings (categorical), then set it as True.You can use this option when there are very few dates in your dataset. If you set it as False, it will convert it into date time format and extract up to 20 features from your date time column. This is the default option and best option.
 - `transform_target`: default is False. If you want to transform your target variable(s), then set it as True and we will transform your target(s) as numeric using Label Encoding as well as multi-label Binary classes. This is a great option when you have categorical target variables.
 - `imbalanced`: default is False. If you have an imbalanced dataset, then set it to True and we will transform your train data using BorderlineSMOTE or SMOTENC which are both great options. We will select the right SMOTE function automatically.
-- `combine_rare`: default is False. This is a great option if you have too many rare categories in your categorical variables. It will automatically combine those categories which are less than 1% of the dataset into one combined category called "rare_categories". You can also set it to False and we will not transform.
+- `combine_rare`: default is False. This is a great option if you have too many rare categories in your categorical variables. It will automatically combine those rare categories which are less than 1% of the dataset into one combined category called "rare_categories". You can also set it to False and we will not transform any of your categories in your categorical variables.
  - `verbose`: This has 3 possible states:
   - `0` silent output. Great for running this silently and getting fast results.
   - `1` more verbiage. Great for knowing how results were and making changes to flags in input.

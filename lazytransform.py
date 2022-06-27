@@ -316,10 +316,12 @@ def classify_vars_pandas(df, verbose=0):
     nlp_threshold = 50
     var_dict = defaultdict(list)
     #### To select all numeric types, use np.number or 'number'
-    numvars = df.select_dtypes(include='number').columns.tolist()
+    intvars = df.select_dtypes(include='integer').columns.tolist()
+    floatvars = df.select_dtypes(include='float').columns.tolist()
     inf_cols = EDA_find_remove_columns_with_infinity(df)
-    numvars = left_subtract(numvars, inf_cols)
-    var_dict['continuous_vars'] = numvars
+    numvars = left_subtract(floatvars, inf_cols)
+    var_dict['continuous_vars'] = floatvars
+    var_dict['int_vars'] = intvars
     #### To select strings you must use the object dtype, but note that this will return all object dtype columns
     stringvars = df.select_dtypes(include='object').columns.tolist()
     discrete_vars = []
@@ -369,7 +371,8 @@ def classify_vars_pandas(df, verbose=0):
 
     if verbose:
         print(f"""    Returning dictionary for variable types with following keys:
-                        continuous_vars = {len(numvars)}, discrete_string_vars = {len(str_vars)}, nlp_vars = {len(nlp_vars)},
+                        continuous_vars = {len(floatvars)}, int_vars = {len(intvars)}, 
+                        discrete_string_vars = {len(str_vars)}, nlp_vars = {len(nlp_vars)},
                         date_vars = {len(datevars)}, time_deltas = {len(deltavars)},
                         categorical_vars = {len(catvars)+len(stringvars)}, date_zones = {len(datezvars)}""")
     
@@ -493,7 +496,7 @@ def change_col_to_string(Xt):
     ### This converts the input column to a string and returns it ##
     return Xt.astype(str)
 
-def create_column_names(Xt, nlpvars=[], catvars=[], discretevars=[], numvars=[], 
+def create_column_names(Xt, nlpvars=[], catvars=[], discretevars=[], floatvars=[], intvars=[],
                 datevars=[], onehot_dict={}, colsize_dict={},datesize_dict={}):
     
     cols_nlp = []
@@ -511,13 +514,14 @@ def create_column_names(Xt, nlpvars=[], catvars=[], discretevars=[], numvars=[],
     ## do the same for datevars ###
     cols_date = []
     for each_date in datevars:
-        colsize = datesize_dict[each_date]
-        date_add = [each_date+'_'+str(x) for x in range(colsize)]
+        #colsize = datesize_dict[each_date]
+        #date_add = [each_date+'_'+str(x) for x in range(colsize)]
+        date_add = datesize_dict[each_date]
         cols_date += date_add
 
     #### this is where we put all the column names together #######
-    cols_names = catvars
-    num_vars = cols_nlp+cols_date+numvars
+    cols_names = catvars+cols_discrete+intvars
+    num_vars = cols_nlp+cols_date+floatvars
     num_len = len(num_vars)
 
     ### Xt is a Sparse matrix array, we need to convert it  to dense array ##
@@ -525,7 +529,7 @@ def create_column_names(Xt, nlpvars=[], catvars=[], discretevars=[], numvars=[],
         Xt = Xt.toarray()
 
     ### Xt is already a dense array, no need to convert it ##
-    Xint = pd.DataFrame(Xt[:,:-num_len], columns = cols_names, dtype=np.int16)
+    Xint = pd.DataFrame(Xt[:,:-num_len], columns = cols_names, dtype=np.int32)
     Xnum = pd.DataFrame(Xt[:, -num_len:], columns = num_vars, dtype=np.float32)
     df = pd.concat([X_int, X_num], axis=1)
     return df
@@ -544,7 +548,8 @@ def make_column_names_unique(cols):
     cols = [x+str(random.randint(1,1000)) if x in seen else x for x in newls]
     return cols
 #############################################################################################################
-def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], numvars=[],datevars=[], onehot_dict={},
+def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], floatvars=[], intvars=[],
+                        datevars=[], onehot_dict={},
                         colsize_dict={}, datesize_dict={}):
     ### This names all the features created by the NLP column. Hence col number=1 and axis=1 ###
     ### Once you get back names of one hot encoded columns, change the column names
@@ -599,14 +604,15 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], numv
     cols_date = []
     date_add = []
     for each_date in datevars:
-        colsize = datesize_dict[each_date]
-        date_add = [each_date+'_'+str(x) for x in range(colsize)]
+        #colsize = datesize_dict[each_date]
+        #date_add = [each_date+'_'+str(x) for x in range(colsize)]
+        date_add = datesize_dict[each_date]
         cols_date += date_add
     ### Remember don't combine the next 2 lines into one. That will be a disaster.
     ### Pandas infers data types autmatically and they always are float64. So
     ###  to avoid that I have split the data into two or three types 
-    cols_names = cols_cat+cols_discrete
-    num_vars = cols_nlp+cols_date+numvars
+    cols_names = cols_cat+cols_discrete+intvars
+    num_vars = cols_nlp+cols_date+floatvars
     num_len = len(num_vars)
     
     ### Xt is a Sparse matrix array, we need to convert it  to dense array ##
@@ -616,12 +622,15 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], numv
     ### Remember don't combine the next 2 lines into one. That will be a disaster.
     ### Pandas infers data types autmatically and they always are float64. So
     ###  to avoid that I have split the data into two or three types 
-    
-    Xint = pd.DataFrame(Xt[:,:-num_len], columns = cols_names, dtype=np.int16)
-    Xnum = pd.DataFrame(Xt[:,-num_len:], columns = num_vars, dtype=np.float32)
-    #### this is where we put all the column names together #######
-    df = pd.concat([Xint, Xnum], axis=1)
-    return df
+    if num_len == 0:
+        Xint = pd.DataFrame(Xt[:,:], columns = cols_names, dtype=np.int16)
+        return Xint
+    else:
+        Xint = pd.DataFrame(Xt[:,:-num_len], columns = cols_names, dtype=np.int16)
+        Xnum = pd.DataFrame(Xt[:,-num_len:], columns = num_vars, dtype=np.float32)
+        #### this is where we put all the column names together #######
+        df = pd.concat([Xint, Xnum], axis=1)
+        return df
 ######################################################################################
 def find_remove_duplicates(list_of_values):
     """
@@ -715,61 +724,105 @@ import copy
 import time
 from dateutil.relativedelta import relativedelta
 from datetime import date
-def create_ts_features(df):
+def _create_ts_features(df):
     """
     This takes in input a dataframe and a date variable.
     It then creates time series features using the pandas .dt.weekday kind of syntax.
     It also returns the data frame of added features with each variable as an integer variable.
     """
-    dfx = pd.to_datetime(df.values)
-    col_name = df.name
-    dfn = pd.DataFrame(df.values, columns=[col_name])
+    df = copy.deepcopy(df)
+    tscol = df.name
+    if isinstance(df, pd.Series):
+        df = pd.DataFrame(df)
+    elif isinstance(df, np.ndarray):
+        print('    input cannot be a numpy array for creating date-time features. Returning')
+        return df
     dt_adds = []
-    
+    ##### This is where we add features one by one #########
     try:
-        dfn['_hour'] = dfx.hour.fillna(0).astype(int)
-        dt_adds.append('_hour')
-        dfn['_minute'] = dfx.minute.fillna(0).astype(int)
-        dt_adds.append('_minute')
+        df[tscol+'_hour'] = df[tscol].dt.hour.fillna(0).astype(int)
+        df[tscol+'_minute'] = df[tscol].dt.minute.fillna(0).astype(int)
+        dt_adds.append(tscol+'_hour')
+        dt_adds.append(tscol+'_minute')
     except:
         print('    Error in creating hour-second derived features. Continuing...')
     try:
-        dfn['_dayofweek'] = dfx.dayofweek.fillna(0).astype(int)
-        dt_adds.append('_dayofweek')
-        dfn.drop(col_name, axis=1, inplace=True)
-        if '_hour' in dt_adds:
-            dfn.loc[:,'_dayofweek_hour_cross'] = dfn['_dayofweek']+dfn['_hour']
-            dt_adds.append('_dayofweek_hour_cross')
-        dfn['_quarter'] = dfx.quarter.fillna(0).astype(int)
-        dt_adds.append('_quarter')
-        dfn['_month'] = dfx.month.fillna(0).astype(int)
-        dt_adds.append('_month')
+        df[tscol+'_dayofweek'] = df[tscol].dt.dayofweek.fillna(0).astype(int)
+        dt_adds.append(tscol+'_dayofweek')
+        if tscol+'_hour' in dt_adds:
+            DAYS = dict(zip(range(7),['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']))
+            df[tscol+'_dayofweek'] = df[tscol+'_dayofweek'].map(DAYS)
+            df.loc[:,tscol+'_dayofweek_hour_cross'] = df[tscol+'_dayofweek'] +" "+ df[tscol+'_hour'].astype(str)
+            dt_adds.append(tscol+'_dayofweek_hour_cross')
+        df[tscol+'_quarter'] = df[tscol].dt.quarter.fillna(0).astype(int)
+        dt_adds.append(tscol+'_quarter')
+        df[tscol+'_month'] = df[tscol].dt.month.fillna(0).astype(int)
+        MONTHS = dict(zip(range(1,13),['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul',
+                                    'Aug', 'Sep', 'Oct', 'Nov', 'Dec']))
+        df[tscol+'_month'] = df[tscol+'_month'].map(MONTHS)
+        dt_adds.append(tscol+'_month')
+        #### Add some features for months ########################################
+        festives = ['Oct','Nov','Dec']
+        name_col = tscol+"_is_festive"
+        df[name_col] = 0
+        df[name_col] = df[tscol+'_month'].map(lambda x: 1 if x in festives else 0).values
+        ### Remember that fillna only works at dataframe level! ###
+        df[[name_col]] = df[[name_col]].fillna(0)
+        dt_adds.append(name_col)
+        summer = ['Jun','Jul','Aug']
+        name_col = tscol+"_is_summer"
+        df[name_col] = 0
+        df[name_col] = df[tscol+'_month'].map(lambda x: 1 if x in summer else 0).values
+        ### Remember that fillna only works at dataframe level! ###
+        df[[name_col]] = df[[name_col]].fillna(0)
+        dt_adds.append(name_col)
+        winter = ['Dec','Jan','Feb']
+        name_col = tscol+"_is_winter"
+        df[name_col] = 0
+        df[name_col] = df[tscol+'_month'].map(lambda x: 1 if x in winter else 0).values
+        ### Remember that fillna only works at dataframe level! ###
+        df[[name_col]] = df[[name_col]].fillna(0)
+        dt_adds.append(name_col)
+        cold = ['Oct','Nov','Dec','Jan','Feb','Mar']
+        name_col = tscol+"_is_cold"
+        df[name_col] = 0
+        df[name_col] = df[tscol+'_month'].map(lambda x: 1 if x in cold else 0).values
+        ### Remember that fillna only works at dataframe level! ###
+        df[[name_col]] = df[[name_col]].fillna(0)
+        dt_adds.append(name_col)
+        warm = ['Apr','May','Jun','Jul','Aug','Sep']
+        name_col = tscol+"_is_warm"
+        df[name_col] = 0
+        df[name_col] = df[tscol+'_month'].map(lambda x: 1 if x in warm else 0).values
+        ### Remember that fillna only works at dataframe level! ###
+        df[[name_col]] = df[[name_col]].fillna(0)
+        dt_adds.append(name_col)
         #########################################################################
-        if '_dayofweek' in dt_adds:
-            dfn.loc[:,'_month_dayofweek_cross'] = dfn['_month'] + dfn['_dayofweek']
-            dt_adds.append('_month_dayofweek_cross')
-        dfn['_year'] = dfx.year.fillna(0).astype(int)
-        dt_adds.append('_year')
+        if tscol+'_dayofweek' in dt_adds:
+            df.loc[:,tscol+'_month_dayofweek_cross'] = df[tscol+'_month'] +" "+ df[tscol+'_dayofweek']
+            dt_adds.append(tscol+'_month_dayofweek_cross')
+        df[tscol+'_year'] = df[tscol].dt.year.fillna(0).astype(int)
+        dt_adds.append(tscol+'_year')
         today = date.today()
-        dfn['_age_in_years'] = today.year - dfx.year.fillna(0).astype(int)
-        dt_adds.append('_age_in_years')
-        dfn['_dayofyear'] = dfx.dayofyear.fillna(0).astype(int)
-        dt_adds.append('_dayofyear')
-        dfn['_dayofmonth'] = dfx.day.fillna(0).astype(int)
-        dt_adds.append('_dayofmonth')
-        dfn['_weekofyear'] = dfx.week.fillna(0).astype(int)
-        dt_adds.append('_weekofyear')
-        weekends = (dfn['_dayofweek'] == 6) | (dfn['_dayofweek'] == 5)
-        dfn['_typeofday'] = 0
-        dfn.loc[weekends, '_typeofday'] = 1
-        dt_adds.append('_typeofday')
-        if '_typeofday' in dt_adds:
-            dfn.loc[:,'_month_typeofday_cross'] = dfn['_month'] + dfn['_typeofday']
-            dt_adds.append('_month_typeofday_cross')
+        df[tscol+'_age_in_years'] = today.year - df[tscol].dt.year.fillna(0).astype(int)
+        dt_adds.append(tscol+'_age_in_years')
+        df[tscol+'_dayofyear'] = df[tscol].dt.dayofyear.fillna(0).astype(int)
+        dt_adds.append(tscol+'_dayofyear')
+        df[tscol+'_dayofmonth'] = df[tscol].dt.day.fillna(0).astype(int)
+        dt_adds.append(tscol+'_dayofmonth')
+        df[tscol+'_weekofyear'] = df[tscol].dt.weekofyear.fillna(0).astype(int)
+        dt_adds.append(tscol+'_weekofyear')
+        weekends = (df[tscol+'_dayofweek'] == 'Sat') | (df[tscol+'_dayofweek'] == 'Sun')
+        df[tscol+'_typeofday'] = 'weekday'
+        df.loc[weekends, tscol+'_typeofday'] = 'weekend'
+        dt_adds.append(tscol+'_typeofday')
+        if tscol+'_typeofday' in dt_adds:
+            df.loc[:,tscol+'_month_typeofday_cross'] = df[tscol+'_month'] +" "+ df[tscol+'_typeofday']
+            dt_adds.append(tscol+'_month_typeofday_cross')
     except:
         print('    Error in creating date time derived features. Continuing...')
-    #print('    created %d columns from time series column' %len(dt_adds))
-    return dfn.values
+    print('    created %d columns from time series %s column' %(len(dt_adds),tscol))
+    return df[dt_adds]
 ##################################################################################
 ### This wrapper was proposed by someone in Stackoverflow which works well #######
 ###  Many thanks to: https://stackoverflow.com/questions/63000388/how-to-include-simpleimputer-before-countvectorizer-in-a-scikit-learn-pipeline
@@ -805,10 +858,10 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     ######################################################################################################################
     #### What does this pipeline do. Here's the major steps:
     # 1. Takes categorical variables and encodes them using my special label encoder which can handle NaNs and future categories
-    # 1. Takes numeric variables and imputes them using a simple imputer
-    # 1. Takes NLP and time series (string) variables and vectorizes them using CountVectorizer
-    # 1. Completely standardizing all of the above using AbsMaxScaler which preserves the relationship of label encoded vars
-    # 1. Finally adds an RFC or RFR to the pipeline so the entire pipeline can be fed to a cross validation scheme
+    # 2. Takes numeric variables and imputes them using a simple imputer
+    # 3. Takes NLP and time series (string) variables and vectorizes them using CountVectorizer
+    # 4. Completely standardizing all of the above using AbsMaxScaler which preserves the relationship of label encoded vars
+    # 5. Finally adds an RFC or RFR to the pipeline so the entire pipeline can be fed to a cross validation scheme
     #### The results are yet to be THOROUGHLY TESTED but preliminary results OF THIS PIPELINE ARE very promising INDEED.
     ######################################################################################################################
     """
@@ -854,7 +907,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     #### Once vars are classified bucket them into major types ###
     catvars = var_dict['categorical_vars'] ### these are low cardinality cat variables 
     discretevars = var_dict['discrete_string_vars'] ### these are high cardinality cat variables 
-    numvars = var_dict['continuous_vars']
+    floatvars = var_dict['continuous_vars']
+    intvars = var_dict['int_vars']
     nlpvars = var_dict['nlp_vars']
     datevars = var_dict['date_vars'] + var_dict['time_deltas'] + var_dict['date_zones']
     #### Converting date variable to a string variable if that is requested ###################
@@ -978,7 +1032,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     one_dim = Make2D(imp_missing)
     remove_special_chars =  lambda x:re.sub('[^A-Za-z0-9_]+', ' ', x)
     ## number of components in SVD
-    top_n = int(max(2, 5*np.log2(X_train.shape[0])))
+    top_n = int(max(2, 3*np.log2(X_train.shape[0])))
     svd_n_iter = int(max(30, top_n*0.1))
     if len(nlpvars) > 0 and verbose:
         print('    %d components chosen for TruncatedSVD(n_iter=%d) after TFIDF' %(top_n, svd_n_iter))
@@ -1001,7 +1055,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     ### we try to find the columns created by counttvectorizer ###
     copy_nlp_vars = copy.deepcopy(nlpvars)
     colsize_dict = {}
-    
+    if verbose:
+        print('    number of dimensions for each NLP var after TFiDF and SVD = %s' %top_n)
     for each_nlp in copy_nlp_vars:
         colsize = vect.fit_transform(X_train[each_nlp]).shape[1]
         colsize_dict[each_nlp] = colsize
@@ -1009,13 +1064,17 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     #vect_one = make_pipeline(change_col_to_string_func, vect)
     vect_one = Pipeline([('change_col_to_string', change_col_to_string_func), ('tfidf_tsvd_pipeline', vect)])
     #### Now create a function that creates time series features #########
-    create_ts_features_func = FunctionTransformer(create_ts_features)
+    create_ts_features_func = FunctionTransformer(_create_ts_features)
     #### we need to the same for date-vars #########
     copy_date_vars = copy.deepcopy(datevars)
     datesize_dict = {}
     for each_datecol in copy_date_vars:
-        datesize = create_ts_features_func.fit_transform(X_train[each_datecol]).shape[1]
-        datesize_dict[each_datecol] = datesize
+        dtx = create_ts_features_func.fit_transform(X_train[each_datecol])
+        datesize_dict[each_datecol] = dtx.columns.tolist()
+        del dtx
+    #### Now we create a pipeline for date-time features as well ####
+    olb = OrdinalEncoder()
+    mk_dates = Pipeline([('date_time_features', create_ts_features_func), ('ordinal_encoder', olb)])
     ####################################################################################
     ######     C A T E G O R I C A L    E N C O D E R S    H E R E #####################
     ######     we need to create unique column names for one hot variables    ##########
@@ -1096,7 +1155,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     else:
         ## there is no scaler ###
         scalers = ''
-
+    ##########  define numeric vars as combo of float and integer variables    #########
+    numvars = intvars + floatvars
     ####################################################################################
     #########          C R E A T I N G      P I P E L I N E      H E R E  ##############
     ### All the imputers work on groups of variables => so they need to be in the ######
@@ -1108,12 +1168,13 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     middle_str0 = "".join(['(lep_one, catvars['+str(i)+']),' for i in range(len(catvars))])
     #### lep_two acts as a major encoder of high cardinality categorical variables ########
     middle_str1 = "".join(['(lep_two, discretevars['+str(i)+']),' for i in range(len(discretevars))])
+    middle_str12 = '(imp, intvars),'
     ##### Now we can combine the rest of the variables into the pipeline ################
     middle_str2 = "".join(['(vect_one, nlpvars['+str(i)+']),' for i in range(len(nlpvars))])
-    middle_str3 = "".join(['(create_ts_features_func, datevars['+str(i)+']),' for i in range(len(datevars))])
-    end_str = '(imp, numvars),    remainder=remainder)'
+    middle_str3 = "".join(['(mk_dates, datevars['+str(i)+']),' for i in range(len(datevars))])
+    end_str = '(imp, floatvars),    remainder=remainder)'
     ### We now put the whole transformer pipeline together ###
-    full_str = init_str+middle_str0+middle_str1+middle_str2+middle_str3+end_str
+    full_str = init_str+middle_str0+middle_str1+middle_str12+middle_str2+middle_str3+end_str
     ct = eval(full_str)
     if verbose:
         print('Check the pipeline creation statement for errors (if any):\n\t%s' %full_str)
@@ -1139,7 +1200,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     params = {"nlpvars": nlpvars,
           "catvars": catvars,
           "discretevars": discretevars,
-          "numvars": numvars,
+          "floatvars": floatvars,
+          "intvars": intvars,
           "datevars": datevars,
           "onehot_dict": onehot_dict,
           "colsize_dict":colsize_dict,
@@ -1447,6 +1509,7 @@ class LazyTransformer(TransformerMixin):
             ### since xformer only transforms X ###
             difftime = max(1, int(time.time()-start_time))
             print('    Time taken to transform dataset = %s second(s)' %difftime)
+            print('    Shape of transformed dataset: %s' %(X_enc.shape,))
             return X_enc
         elif self.fitted and self.model is not None:
             print('Error: No transform allowed. You must use fit and predict when using a pipeline with a model.')
@@ -1476,6 +1539,7 @@ class LazyTransformer(TransformerMixin):
             print('    SMOTE transformed data in pipeline. Dont forget to use transformed X and y from output.')
             difftime = max(1, int(time.time()-start_time))
             print('    Time taken to transform dataset = %s second(s)' %difftime)
+            print('    Shape of transformed dataset: %s' %(X_enc.shape,))
             return X_enc, y_enc
         else:
             print('LazyTransformer has not been fitted yet. Returning...')
@@ -1511,12 +1575,29 @@ class LazyTransformer(TransformerMixin):
                 print('    SMOTE transformed data in pipeline. Dont forget to use transformed X and y from output.')
         difftime = max(1, int(time.time()-start_time))
         print('    Time taken to transform dataset = %s second(s)' %difftime)
+        print('    Shape of transformed dataset: %s' %(X_trans.shape,))
         return X_trans, y_trans
 
     def fit_predict(self, X, y=None):
         transformer_ = self.fit(X,y)
         y_trans =  transformer_.predict(X)
         return X, y_trans
+
+    def print_pipeline(self):
+        from sklearn import set_config
+        set_config(display="text")
+        if self.model:
+            return self.modelformer
+        else:
+            return self.xformer
+
+    def plot_pipeline(self):
+        from sklearn import set_config
+        set_config(display="diagram")
+        if self.model:
+            return self.modelformer
+        else:
+            return self.xformer
 
     def plot_importance(self, max_features=10):
         import lightgbm as lgbm
@@ -1863,10 +1944,11 @@ def check_if_GPU_exists():
     except:
         print('No GPU active on this device')
         return False
+###############################################################################################################
 
 ###############################################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.61'
+version_number =  '0.71'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
