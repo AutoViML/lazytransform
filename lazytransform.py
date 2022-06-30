@@ -1953,7 +1953,7 @@ def check_if_GPU_exists():
 
 ###############################################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.75'
+version_number =  '0.76'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
