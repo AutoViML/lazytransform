@@ -529,10 +529,15 @@ def create_column_names(Xt, nlpvars=[], catvars=[], discretevars=[], floatvars=[
         Xt = Xt.toarray()
 
     ### Xt is already a dense array, no need to convert it ##
-    Xint = pd.DataFrame(Xt[:,:-num_len], columns = cols_names, dtype=np.int32)
-    Xnum = pd.DataFrame(Xt[:, -num_len:], columns = num_vars, dtype=np.float32)
-    df = pd.concat([X_int, X_num], axis=1)
-    return df
+    if num_len == 0:
+        Xint = pd.DataFrame(Xt[:,:], columns = cols_names, dtype=np.int16)
+        return Xint
+    else:
+        Xint = pd.DataFrame(Xt[:,:-num_len], columns = cols_names, dtype=np.int16)
+        Xnum = pd.DataFrame(Xt[:,-num_len:], columns = num_vars, dtype=np.float32)
+        #### this is where we put all the column names together #######
+        df = pd.concat([Xint, Xnum], axis=1)
+        return df
 #############################################################################################################
 import random
 import collections
@@ -1948,7 +1953,7 @@ def check_if_GPU_exists():
 
 ###############################################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.72'
+version_number =  '0.75'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
