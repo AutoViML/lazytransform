@@ -20,19 +20,29 @@
 # What does this pipeline do? Here's the major steps:
 # 1. Takes categorical variables and encodes them using my special label encoder which can 
 #    handle NaNs and future categories
-# 1. Takes numeric variables and imputes them using a simple imputer
-# 1. Takes NLP and time series (string) variables and vectorizes them using CountVectorizer
-# 1. Completely standardizing all of the above using AbsMaxScaler which preserves the 
+# 1. Takes integer and float variables and imputes them using a simple imputer (with a default)
+# 1. Takes NLP and time series (as string) variables and vectorizes them using TFiDF
+# 1. Takes pandas date-time (actual date-time) variables and extracts more features from them
+# 1. Completely Normalizes all of the above using AbsMaxScaler which preserves the 
 #     relationship of label encoded vars
-# 1. Finally adds an RFC or RFR to the pipeline so the entire pipeline can be fed to a 
-#     cross validation scheme
-# The results are yet to be seen but preliminary results very promising performance
+# 1. Optionally adds any model to pipeline so the entire pipeline can be fed to a 
+#     cross validation scheme (just set model=any_sklearn_model() when defining the pipeline)
+# The initial results from this pipeline in real world data sets is promising indeed.
 ############################################################################################
-####### This pipeline is inspired by Kevin Markham's class on Scikit-Learn pipelines. ######
+####### This Transformer is inspired by Kevin Markham's class on Scikit-Learn pipelines. ###
 #######   You can sign up for his Data School class here: https://www.dataschool.io/  ######
 ############################################################################################
 import numpy as np
 import pandas as pd
+np.random.seed(99)
+################################################################################
+import warnings
+warnings.filterwarnings("ignore")
+from sklearn.exceptions import DataConversionWarning
+warnings.filterwarnings(action='ignore', category=DataConversionWarning)
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+################################################################################
 from sklearn.impute import SimpleImputer
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -49,7 +59,7 @@ from sklearn.preprocessing import MaxAbsScaler, StandardScaler, MinMaxScaler
 from sklearn.preprocessing import RobustScaler
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.decomposition import TruncatedSVD
-
+import gc
 ##############  These imports are to make trouble shooting easier #####
 import copy
 import pickle
@@ -520,8 +530,8 @@ def create_column_names(Xt, nlpvars=[], catvars=[], discretevars=[], floatvars=[
         cols_date += date_add
 
     #### this is where we put all the column names together #######
-    cols_names = catvars+cols_discrete+intvars
-    num_vars = cols_nlp+cols_date+floatvars
+    cols_names = catvars+cols_discrete+intvars+cols_date
+    num_vars = cols_nlp+floatvars
     num_len = len(num_vars)
 
     ### Xt is a Sparse matrix array, we need to convert it  to dense array ##
@@ -616,8 +626,8 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], floa
     ### Remember don't combine the next 2 lines into one. That will be a disaster.
     ### Pandas infers data types autmatically and they always are float64. So
     ###  to avoid that I have split the data into two or three types 
-    cols_names = cols_cat+cols_discrete+intvars
-    num_vars = cols_nlp+cols_date+floatvars
+    cols_names = cols_cat+cols_discrete+intvars+cols_date
+    num_vars = cols_nlp+floatvars
     num_len = len(num_vars)
     
     ### Xt is a Sparse matrix array, we need to convert it  to dense array ##
@@ -854,7 +864,7 @@ def return_default():
     return missing_value
 ##################################################################################
 def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='', 
-            date_to_string=False, save_flag=False, combine_rare_flag=False, verbose=0):
+            date_to_string='', save_flag=False, combine_rare_flag=False, verbose=0):
     """
     ######################################################################################################################
     # # This is the SIMPLEST best pipeline for NLP and Time Series problems - Created by Ram Seshadri
@@ -917,18 +927,35 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     nlpvars = var_dict['nlp_vars']
     datevars = var_dict['date_vars'] + var_dict['time_deltas'] + var_dict['date_zones']
     #### Converting date variable to a string variable if that is requested ###################
-    if datevars:
-        if date_to_string:
-            copy_datevars = copy.deepcopy(datevars)
-            for each_date in copy_datevars:
-                print('    date_var %s will be treated as an NLP object and transformed by TfidfVectorizer' %each_date)
-                X_train[each_date] = X_train[each_date].astype(str).values
-                nlpvars.append(each_date)
-                datevars.remove(each_date)
+    if date_to_string:
+        if isinstance(date_to_string, str):
+            copy_datevars = [date_to_string]
         else:
-            print('    creating time series features from date_vars=%s as date_to_string is set to False' %datevars)
+            copy_datevars = copy.deepcopy(date_to_string)
+        ## if they have given only one string variable 
+        for each_date in copy_datevars:
+            print('    string variable %s will be treated as NLP var and transformed by TfidfVectorizer' %each_date)
+            X_train[each_date] = X_train[each_date].astype(str).values
+            if not each_date in nlpvars:
+                nlpvars.append(each_date)
+            #### Next check to remove them here ###
+            if each_date in datevars:
+                datevars.remove(each_date)
+            elif each_date in discretevars:
+                discretevars.remove(each_date)
+            elif each_date in catvars:
+                catvars.remove(each_date)
+    ### Now do the actual processing for datevars ########
+    if datevars:
+        if verbose:
+            print('Date time vars: %s detected. Several features will be extracted...' %datevars)
+        else:
+            pass
     else:
-        print('    no date time variables detected in this dataset')
+        if verbose:
+            print('    no date time variables detected in this dataset')
+        else:
+            pass
     ########################################
     ### Set the category encoders here #####
     ########################################
@@ -1036,38 +1063,44 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     ####################################################################################
     one_dim = Make2D(imp_missing)
     remove_special_chars =  lambda x:re.sub('[^A-Za-z0-9_]+', ' ', x)
-    ## number of components in SVD
-    top_n = int(max(2, 3*np.log2(X_train.shape[0])))
-    svd_n_iter = int(max(30, top_n*0.1))
-    if len(nlpvars) > 0 and verbose:
-        print('    %d components chosen for TruncatedSVD(n_iter=%d) after TFIDF' %(top_n, svd_n_iter))
-    if X_train.shape[0] >= 100000:
-        tiffd = TfidfVectorizer(strip_accents='unicode',max_features=6000, preprocessor=remove_special_chars)
-    elif X_train.shape[0] >= 10000:
-        #tiffd = CountVectorizer(strip_accents='unicode',max_features=1000)
-        tiffd = TfidfVectorizer(strip_accents='unicode',max_features=3000, preprocessor=remove_special_chars)
-        #tiffd = MyTiff(strip_accents='unicode',max_features=300, min_df=0.01)
-    else:
-        #vect = CountVectorizer(strip_accents='unicode',max_features=100)
-        tiffd = TfidfVectorizer(strip_accents='unicode',max_features=1000, preprocessor=remove_special_chars)
-        #tiffd = MyTiff(strip_accents='unicode',max_features=300, min_df=0.01)
-    ### create a new pipeline with filling with constant missing ##
-    tsvd = TruncatedSVD(n_components=top_n, n_iter=svd_n_iter, random_state=3)
-    vect = Pipeline([('make_one_dim', one_dim), ('make_tfidf_pipeline', tiffd), ('truncated_svd', tsvd)])
-    #vect = make_pipeline(one_dim, tiffd, tsvd)
-    ### Similarly you need to create a function that converts all NLP columns to string before feeding to CountVectorizer
-    change_col_to_string_func = FunctionTransformer(change_col_to_string)
-    ### we try to find the columns created by counttvectorizer ###
-    copy_nlp_vars = copy.deepcopy(nlpvars)
     colsize_dict = {}
-    if verbose:
-        print('    number of dimensions for each NLP var after TFiDF and SVD = %s' %top_n)
-    for each_nlp in copy_nlp_vars:
-        colsize = vect.fit_transform(X_train[each_nlp]).shape[1]
-        colsize_dict[each_nlp] = colsize
-    ##### we collect the column size of each nlp variable and feed it to vect_one ##
-    #vect_one = make_pipeline(change_col_to_string_func, vect)
-    vect_one = Pipeline([('change_col_to_string', change_col_to_string_func), ('tfidf_tsvd_pipeline', vect)])
+    ## number of components in SVD ####
+    if len(nlpvars) > 0:
+        copy_nlps = copy.deepcopy(nlpvars)
+        nuniques = []
+        for each_nlp in copy_nlps:
+            nuniques.append(int(max(2, 3*np.log2(X_train[each_nlp].nunique()))))
+        #### find the min and set the TFIDF for that smallest NLP variable ########            
+        top_n = np.min(nuniques)
+        top_n = int(min(30, top_n*0.1))
+        svd_n_iter = int(min(10, top_n*0.1))
+        if verbose:
+            print('    %d components chosen for TruncatedSVD(n_iter=%d) after TFIDF' %(top_n, svd_n_iter))
+        #############   This is where we set defaults for NLP transformers ##########
+        if X_train.shape[0] >= 100000:
+            tiffd = TfidfVectorizer(strip_accents='unicode',max_features=6000, preprocessor=remove_special_chars)
+        elif X_train.shape[0] >= 10000:
+            #tiffd = CountVectorizer(strip_accents='unicode',max_features=1000)
+            tiffd = TfidfVectorizer(strip_accents='unicode',max_features=3000, preprocessor=remove_special_chars)
+            #tiffd = MyTiff(strip_accents='unicode',max_features=300, min_df=0.01)
+        else:
+            #vect = CountVectorizer(strip_accents='unicode',max_features=100)
+            tiffd = TfidfVectorizer(strip_accents='unicode',max_features=1000, preprocessor=remove_special_chars)
+            #tiffd = MyTiff(strip_accents='unicode',max_features=300, min_df=0.01)
+        ### create a new pipeline with filling with constant missing ##
+        tsvd = TruncatedSVD(n_components=top_n, n_iter=svd_n_iter, random_state=3)
+        vect = Pipeline([('make_one_dim', one_dim), ('make_tfidf_pipeline', tiffd), ('truncated_svd', tsvd)])
+        #vect = make_pipeline(one_dim, tiffd, tsvd)
+        ### Similarly you need to create a function that converts all NLP columns to string before feeding to CountVectorizer
+        change_col_to_string_func = FunctionTransformer(change_col_to_string)
+        ### we try to find the columns created by counttvectorizer ###
+        copy_nlp_vars = copy.deepcopy(nlpvars)
+        for each_nlp in copy_nlp_vars:
+            colsize = vect.fit_transform(X_train[each_nlp]).shape[1]
+            colsize_dict[each_nlp] = colsize
+        ##### we collect the column size of each nlp variable and feed it to vect_one ##
+        #vect_one = make_pipeline(change_col_to_string_func, vect)
+        vect_one = Pipeline([('change_col_to_string', change_col_to_string_func), ('tfidf_tsvd_pipeline', vect)])
     #### Now create a function that creates time series features #########
     create_ts_features_func = FunctionTransformer(_create_ts_features)
     #### we need to the same for date-vars #########
@@ -1087,7 +1120,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     copy_cat_vars = copy.deepcopy(catvars)
     onehot_dict = defaultdict(return_default)
     ##### This is extremely complicated logic -> be careful before modifying them!
-    
+    gc.collect()
     if basic_encoder in onehot_type_encoders:
         for each_catcol in copy_cat_vars:
             copy_lep_one = copy.deepcopy(lep_one)
@@ -1147,6 +1180,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     ### If you choose StandardScaler or MinMaxScaler, the integer values become stretched 
     ###  as if they are far apart when in reality they are close. So avoid it for now.
     ####################################################################################
+    if scalers and verbose:
+            print('Caution: ### When you have categorical or date-time vars in data, scaling may not be helpful. ##')
     if scalers=='max' or scalers == 'minmax':
         scaler = MinMaxScaler()
     elif scalers=='standard' or scalers=='std':
@@ -1158,7 +1193,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         ### If you choose MaxAbsScaler, then NaNs which were Label Encoded as -1 are preserved as - (negatives). This is fantastic.
         scaler = MaxAbsScaler()
     else:
-        ## there is no scaler ###
+        if verbose:
+            print('    ### there is no scaler specified ###')
         scalers = ''
     ##########  define numeric vars as combo of float and integer variables    #########
     numvars = intvars + floatvars
@@ -1174,9 +1210,12 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     #### lep_two acts as a major encoder of high cardinality categorical variables ########
     middle_str1 = "".join(['(lep_two, discretevars['+str(i)+']),' for i in range(len(discretevars))])
     middle_str12 = '(imp, intvars),'
+    middle_str2 = "".join(['(mk_dates, datevars['+str(i)+']),' for i in range(len(datevars))])
     ##### Now we can combine the rest of the variables into the pipeline ################
-    middle_str2 = "".join(['(vect_one, nlpvars['+str(i)+']),' for i in range(len(nlpvars))])
-    middle_str3 = "".join(['(mk_dates, datevars['+str(i)+']),' for i in range(len(datevars))])
+    if nlpvars:
+        middle_str3 = "".join(['(vect_one, nlpvars['+str(i)+']),' for i in range(len(nlpvars))])
+    else:
+        middle_str3 = ''
     end_str = '(imp, floatvars),    remainder=remainder)'
     ### We now put the whole transformer pipeline together ###
     full_str = init_str+middle_str0+middle_str1+middle_str12+middle_str2+middle_str3+end_str
@@ -1289,10 +1328,12 @@ class LazyTransformer(TransformerMixin):
              'helmert','quantile','summary', 'label','auto'
     scalers : default is None. You can send one of the following strings:
             'std', 'standard', 'minmax', 'max', 'robust', 'maxabs'
-    date_to_string : default is False. If True it means date columns will be
-            converted to pandas datetime vars and meaningful features will be
-            extracted such as dayoftheweek, etc. If False, datetime columns
-            will be treated as string variables and used as cat vars or NLP vars.
+    date_to_string : default is ''. If you want one or more date-time columns which are
+            object or string format, you can send those column names here and they will
+            be treated as string variables and used as NLP vars for TFIDF. But 
+            if you leave it as an empty string then if date-time columns are detected
+            they will be automatically converted to a pandas datetime variable and 
+            meaningful features will be extracted such as dayoftheweek, from it.
     transform_target : default is False. If True , target column(s) will be 
             converted to numbers and treated as numeric. If False, target(s)
             will be left as they are and not converted.
@@ -1949,11 +1990,9 @@ def check_if_GPU_exists():
     except:
         print('No GPU active on this device')
         return False
-###############################################################################################################
-
-###############################################################################################################
+############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.76'
+version_number =  '0.78'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
