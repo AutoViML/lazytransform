@@ -23,6 +23,7 @@ setuptools.setup(
         "imbalanced-learn>=0.7",
         "category-encoders<=2.4.0",
         "xlrd",
+        "imbalanced-ensemble>=0.1.7",
         "tqdm",
     ],
     include_package_data = True,
