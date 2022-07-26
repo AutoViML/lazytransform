@@ -739,7 +739,7 @@ import copy
 import time
 from dateutil.relativedelta import relativedelta
 from datetime import date
-def _create_ts_features(df):
+def _create_ts_features(df, verbose=0):
     """
     This takes in input a dataframe and a date variable.
     It then creates time series features using the pandas .dt.weekday kind of syntax.
@@ -836,7 +836,8 @@ def _create_ts_features(df):
             dt_adds.append(tscol+'_month_typeofday_cross')
     except:
         print('    Error in creating date time derived features. Continuing...')
-    print('    created %d columns from time series %s column' %(len(dt_adds),tscol))
+    if verbose:
+        print('    created %d columns from time series %s column' %(len(dt_adds),tscol))
     return df[dt_adds]
 ##################################################################################
 ### This wrapper was proposed by someone in Stackoverflow which works well #######
@@ -1992,7 +1993,7 @@ def check_if_GPU_exists():
         return False
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.80'
+version_number =  '0.81'
 if module_type != 'Imported':
     print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
         lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
