@@ -79,7 +79,6 @@ from category_encoders import TargetEncoder, CatBoostEncoder, WOEEncoder, JamesS
 from category_encoders.glmm import GLMMEncoder
 from sklearn.preprocessing import LabelEncoder
 from category_encoders.wrapper import PolynomialWrapper
-from category_encoders.quantile_encoder import QuantileEncoder
 from category_encoders.quantile_encoder import SummaryEncoder
 from category_encoders import OneHotEncoder
 from imblearn.over_sampling import SMOTE, BorderlineSMOTE, SMOTENC
@@ -990,7 +989,6 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
                     'james': JamesSteinEncoder(drop_invariant=True),
                     'jamesstein': JamesSteinEncoder(drop_invariant=True),
                     'helmert': HelmertEncoder(drop_invariant=True),
-                    'quantile': QuantileEncoder(drop_invariant=True, quantile=0.5, m=1.0),
                     'summary': SummaryEncoder(drop_invariant=True, quantiles=[0.25, 0.5, 1.0], m=1.0),
                     'label': My_LabelEncoder(),
                     'auto': My_LabelEncoder(),
@@ -3625,7 +3623,7 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
 #########   This is where SULOCLASSIFIER and SULOREGRESSOR END   ###########################
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.91'
+version_number =  '0.92'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
