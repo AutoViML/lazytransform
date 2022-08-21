@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="lazytransform",
-    version="0.81",
+    version="0.91",
     author="Ram Seshadri",
     # author_email="author@example.com",
     description="Automatically build data and model pipelines using scikit-learn in a single line of code",
@@ -21,7 +21,7 @@ setuptools.setup(
         "matplotlib",
         "scikit-learn<=0.24.2",
         "imbalanced-learn>=0.7",
-        "category-encoders<=2.4.0",
+        "category-encoders~=2.4",
         "xlrd",
         "imbalanced-ensemble>=0.1.7",
         "tqdm",

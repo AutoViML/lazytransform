@@ -1,7 +1,21 @@
 # lazytransform
 Automatically transform all categorical, date-time, NLP variables in your data set to numeric in a single line of code for any data set any size.
 
-<a href="https://github.com/AutoViML/lazytransform"><img src="https://i.ibb.co/WktFktL/lazytransformer.png" alt="lazytransformer" border="0"></a><br /><a target='_blank' href='https://emoticoncentral.com/category/seductive'>seductive emoticons</a><br />
+<a href="https://github.com/AutoViML/lazytransform"><img src="https://i.ibb.co/WktFktL/lazytransformer.png" alt="lazytransformer" border="0"></a>
+## Update (June 2022)
+<ol>
+<li><b>lazytransform as of version 0.91 has two Super Learning Optimized (SULO) Ensembles named "SuloClassifier" and "SuloRegressor"</b>. The estimators are "optimized" in the sense that you can use them for all kinds of multi-label multi-class and Imbalanced data set problems without needing to do hyper-parameter tuning with GridSearchCV. They are built using basic scikit-learn estimators and are self-optimizing since they perform hyper-param tuning for each kind of problem and use weights for each classifier or regressor, different random seeds, etc. to make them highly performant. On top of it, they are fully scikit-learn compatible with the same "fit and predict" syntax. </li>
+Take a look at the benchmarking results notebook here for SuloClassifier: 
+
+![Notebook](https://github.com/AutoViML/lazytransform/tree/main/notebooks/SuloClassifier_Benchmarking_Results.ipynb)
+
+![SuloClassifier](./images/SuloClassifier.png)
+
+We ran a similar benchmarking result in SuloRegressor against XGBoost and LightGBM Regressors and it held its own against them. Take a look at the benchmarking result:
+
+![Notebook](https://github.com/AutoViML/lazytransform/tree/main/notebooks/SuloRegressor_Benchmarking_Results.ipynb)
+
+![SuloRegressor](./images/SuloRegressor.png)
 
 # Table of Contents
 <ul>
