@@ -988,7 +988,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
                     'james': JamesSteinEncoder(drop_invariant=True),
                     'jamesstein': JamesSteinEncoder(drop_invariant=True),
                     'helmert': HelmertEncoder(drop_invariant=True),
-                    'summary': SummaryEncoder(drop_invariant=True, quantiles=[0.25, 0.5, 1.0], m=1.0),
+                    #'summary': SummaryEncoder(drop_invariant=True, quantiles=[0.25, 0.5, 1.0], m=1.0),
                     'label': My_LabelEncoder(),
                     'auto': My_LabelEncoder(),
                     }
@@ -1001,8 +1001,10 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     lep = My_LabelEncoder_Pipe()
     ###### Just a warning in case someone doesn't know about one hot encoding ####
     ### these encoders result in more columns than the original - hence they are considered one hot type ###
-    onehot_type_encoders = ['onehot', 'helmert','bdc', 'bde', 'hashing','hash','sum','base', 'quantile',
-                                'summary']
+    onehot_type_encoders = ['onehot', 'helmert','bdc', 'bde', 'hashing','hash','sum','base', 
+                                #'quantile',
+                                #'summary'
+                                ]
 
     if basic_encoder in onehot_type_encoders or encoder in onehot_type_encoders:
         if verbose:
@@ -1014,6 +1016,12 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
             print('    Beware! Hashing encoders can take a real long time for even small data sets!')
         else:
             pass
+    else:
+        print('encoder not found in list of encoders. Using auto instead')
+        encoders = 'auto'
+        basic_encoder = 'label'
+        encoder = 'label'
+
 
     ######################################################################################
     ####          This is where we convert all the encoders to pipeline components    ####
@@ -3622,7 +3630,7 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
 #########   This is where SULOCLASSIFIER and SULOREGRESSOR END   ###########################
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.93'
+version_number =  '0.94'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
