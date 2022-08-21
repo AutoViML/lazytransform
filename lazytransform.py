@@ -79,7 +79,6 @@ from category_encoders import TargetEncoder, CatBoostEncoder, WOEEncoder, JamesS
 from category_encoders.glmm import GLMMEncoder
 from sklearn.preprocessing import LabelEncoder
 from category_encoders.wrapper import PolynomialWrapper
-from category_encoders.quantile_encoder import SummaryEncoder
 from category_encoders import OneHotEncoder
 from imblearn.over_sampling import SMOTE, BorderlineSMOTE, SMOTENC
 from sklearn.pipeline import make_pipeline, Pipeline
@@ -3623,7 +3622,7 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
 #########   This is where SULOCLASSIFIER and SULOREGRESSOR END   ###########################
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.92'
+version_number =  '0.93'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
