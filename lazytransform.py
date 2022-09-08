@@ -994,6 +994,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
                     'auto': My_LabelEncoder(),
                     }
 
+    non_one_hot_list = ['label','james','jamesstein','loo','woe','glmm','glm','target','catboost','count','ordinal']
     ### set the basic encoder for low cardinality vars here ######
     be = encoder_dict[basic_encoder]
     #### These are applied for high cardinality variables ########
@@ -1017,6 +1018,9 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
             print('    Beware! Hashing encoders can take a real long time for even small data sets!')
         else:
             pass
+    elif encoder in non_one_hot_list or basic_encoder in non_one_hot_list:
+        if verbose:
+            print('%s encoder selected for transforming all categorical variables')
     else:
         print('encoder not found in list of encoders. Using auto instead')
         encoders = 'auto'
@@ -1714,18 +1718,30 @@ class LazyTransformer(TransformerMixin):
         """
 
         start_time = time.time()
-        if len(params) == 0 and not multi_label:
-            rand_params = {
-                'model__learning_rate': [0.0001, 0.001, 0.01, 0.1, 0.5],
-                'model__num_leaves': [5, 10,30,50],
-                'model__n_estimators': [100,200,300],
-                'model__class_weight':[None, 'balanced'],
+        if len(params) == 0: 
+            if modeltype == 'Regression':
+                rand_params = {
+                    'model__n_estimators': np.linspace(50,1000,10).astype(int),
+                    'model__learning_rate': np.linspace(0.0001,1,10),
+                    'model__boosting_type': ['dart','gbdt'],
                     }
-            grid_params = {
-                'model__n_estimators': [100, 150, 200, 250, 300],
-                'model__class_weight':[None, 'balanced'],
+                grid_params = {
+                    'model__n_estimators': np.linspace(50,1000,5).astype(int),
+                    'model__learning_rate': np.linspace(0.0001,1,5),
+                    'model__boosting_type': ['dart','gbdt'],
+                }
+            else:
+                rand_params = {
+                    'model__n_estimators': np.linspace(50,1000,10).astype(int),
+                    'model__class_weight':[None, 'balanced'],
+                    'model__learning_rate': np.linspace(0.0001,1,10),
+                    'model__boosting_type': ['dart','gbdt'],
                     }
-
+                grid_params = {
+                    'model__n_estimators': np.linspace(50,1000,5).astype(int),
+                    'model__class_weight':[None, 'balanced'],
+                    'model__boosting_type': ['dart','gbdt'],
+                        }
         else:
             if grid_search:
                 grid_params = copy.deepcopy(params)
@@ -1733,30 +1749,37 @@ class LazyTransformer(TransformerMixin):
                 rand_params = copy.deepcopy(params)
                 
         ########   Now let's perform randomized search to find best hyper parameters ######
+        init_params = {
+              }
+
         if modeltype == 'Regression':
             scoring = 'neg_mean_squared_error'
             score_name = 'MSE'
+            self.model = LGBMRegressor(random_seed=99)
+            self.model.set_params(**init_params)            
         else:
+            self.model = LGBMClassifier(random_seed=99)
+            self.model.set_params(**init_params)            
             if grid_search:
                 scoring = 'balanced_accuracy'
                 score_name = 'balanced_accuracy'
             else:
-                scoring = 'recall'
-                score_name = 'recall'
+                scoring = 'balanced_accuracy'
+                score_name = 'balanced_accuracy'
 
         if X_train.shape[0] <=100000:
             n_iter = 10
         else:
             n_iter = 5
-
         #### This is where you grid search the pipeline now ##############
+
         if grid_search:
             search = GridSearchCV(
                     self, 
                     grid_params, 
-                    cv=3,
+                    cv=5,
                     scoring=scoring,
-                    refit=True,
+                    refit=False,
                     return_train_score = True,
                     n_jobs=-1,
                     verbose=True,
@@ -1766,14 +1789,15 @@ class LazyTransformer(TransformerMixin):
                     self,
                     rand_params,
                     n_iter = n_iter,
-                    cv = 3,
-                    refit=True,
+                    cv = 5,
+                    refit=False,
                     return_train_score = True,
                     random_state = 99,
                     scoring=scoring,
                     n_jobs=-1,
                     verbose=True,
                     )
+            print('Number of iterations in randomized search = %s' %n_iter)
         
         ##### This is where we search for hyper params for model #######
         search.fit(X_train, y_train)
@@ -1782,17 +1806,27 @@ class LazyTransformer(TransformerMixin):
         if modeltype == 'Regression':
             print('Mean cross-validated train %s = %0.04f' %(score_name, np.sqrt(abs(cv_results['mean_train_score'].mean()))))
             print('    Mean cross-validated test %s = %0.04f' %(score_name, np.sqrt(abs(cv_results['mean_test_score'].mean()))))
+            if cv_results['mean_test_score'].mean()/cv_results['mean_train_score'].mean() >= 1.2:
+                print('#### Model is overfitting. You might want to test without GridSearch option as well ####')
         else:
             print('Mean cross-validated train %s = %0.04f' %(score_name, cv_results['mean_train_score'].mean()))
             print('    Mean cross-validated test %s = %0.04f' %(score_name, cv_results['mean_test_score'].mean()))
+            if cv_results['mean_train_score'].mean()/cv_results['mean_test_score'].mean() >= 1.2:
+                print('#### Model is overfitting. You might want to test without GridSearch option as well ####')
             
         print('Time taken for Hyper Param tuning of LGBM (in minutes) = %0.1f' %(
                                         (time.time()-start_time)/60))
         print('Best params from search:\n%s' %search.best_params_)
-
-        newpipe = search.best_estimator_.model.set_params(**search.best_params_)
+        new_model = self.model.set_params(**search.best_params_)
+        if multi_label:
+            if modeltype == 'Regression':
+                new_model = MultiOutputRegressor(new_model)
+            else:
+                new_model = MultiOutputClassifier(new_model)
+        self.model = new_model
+        self.fit(X_train, y_train)
         print('    returning a new LazyTransformer pipeline that contains the best model trained on your train dataset!')
-        return newpipe
+        return self
 ####################################################################################
 # This is needed to make this a regular transformer ###
 class YTransformer(TransformerMixin):
@@ -3668,7 +3702,7 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
 #########   This is where SULOCLASSIFIER and SULOREGRESSOR END   ###########################
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.95'
+version_number =  '0.96'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
