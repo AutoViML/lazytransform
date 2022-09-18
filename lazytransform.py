@@ -35,6 +35,8 @@
 import numpy as np
 import pandas as pd
 np.random.seed(99)
+import random
+random.seed(42)
 ################################################################################
 import warnings
 warnings.filterwarnings("ignore")
@@ -84,6 +86,8 @@ from category_encoders import OneHotEncoder
 from imblearn.over_sampling import SMOTE, BorderlineSMOTE, SMOTENC
 from sklearn.pipeline import make_pipeline, Pipeline
 #from sklearn.preprocessing import OneHotEncoder
+from tqdm import tqdm
+from sklearn.model_selection import TimeSeriesSplit
 #########################################################
 class My_LabelEncoder(BaseEstimator, TransformerMixin):
     """
@@ -1216,7 +1220,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         scaler = MaxAbsScaler()
     else:
         if verbose:
-            print('    ### there is no scaler specified ###')
+            print('    alert: there is no scaler specified. Options: max, std, robust, maxabs.')
         scalers = ''
     ##########  define numeric vars as combo of float and integer variables    #########
     numvars = intvars + floatvars
@@ -1242,7 +1246,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     ### We now put the whole transformer pipeline together ###
     full_str = init_str+middle_str0+middle_str1+middle_str12+middle_str2+middle_str3+end_str
     ct = eval(full_str)
-    if verbose:
+    if verbose >=2:
         print('Check the pipeline creation statement for errors (if any):\n\t%s' %full_str)
     ### Once that is done, we create sequential steps for a pipeline
     if scalers:
@@ -1360,9 +1364,10 @@ class LazyTransformer(TransformerMixin):
             converted to numbers and treated as numeric. If False, target(s)
             will be left as they are and not converted.
     imbalanced : default is False. If True, we will try SMOTE if no model is input.
-            If a model is input, then it will be wrapped in a special Classifier
-            called SuloClassifier which is a high performance stacking model that
-            will work on your imbalanced data set. If False, your data will be 
+            Additionally, if a model is also given as input, then that base model will be
+            wrapped in a Super Learning Optimized (SULO) ensemble model
+            called SuloClassifier which is a performant stacking model that
+            train on your imbalanced data set. If False, your data will be 
             left as is and nothing will be done to it.
     save : default is False. If True, it will save the data and model pipeline in a 
             pickle file in the current working directory under "LazyTransformer_pipeline.pkl"
@@ -1488,6 +1493,7 @@ class LazyTransformer(TransformerMixin):
                 ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
             ##   Now we fit the model pipeline to X and y ###
             try:
+                
                 #### This is a very important set of statements ####
                 self.xformer = data_pipe.fit(X,y)
                 if self.transform_target:
@@ -1503,15 +1509,18 @@ class LazyTransformer(TransformerMixin):
                     if model_name == '': 
                         self.model = None
                     else:
-                        self.model = ml_pipe.fit(X,yt)
+                        ml_pipe.fit(X,yt)
+                        self.model = ml_pipe
                 else:
                     ### Make sure you leave self.model as None when there is no model ### 
                     if model_name == '': 
                         self.model = None
                     else:
-                        self.model = ml_pipe.fit(X,y)
+                        ml_pipe.fit(X,y)
+                        self.model = ml_pipe
             except Exception as e:
                 print('Erroring due to %s: There may be something wrong with your data types or inputs.' %e)
+                self.model = ml_pipe
                 return self
             print('model pipeline fitted with %s model' %model_name)
             self.fitted = True
@@ -2087,15 +2096,23 @@ from scipy.stats import randint as sp_randInt
 
 class SuloClassifier(BaseEstimator, ClassifierMixin):
     """
-    SuloClassifier works really fast and very well for all kinds of datasets.
-    It works on small as well as big data. It works in multi-class as well as multi-labels.
-    It works on regular balanced data as well as imbalanced data sets.
-    The reason it works so well is that it is an ensemble of highly tuned models.
-    You don't have to send any inputs but if you wanted to, you can send in two inputs:
-    n_estimators: number of models you want in the final ensemble.
-    base_estimator: base model you want to train in each of the ensembles.
-    If you want, you can igore both these inputs and it will automatically choose these.
+    SuloClassifier stands for Super Learning Optimized (SULO) Classifier.
+    -- It works on small as well as big data. It works in Integer mode as well as float-mode.
+    -- It works on regular balanced data as well as skewed regression targets.
+    The reason it works so well is that Sulo is an ensemble of highly tuned models.
+    -- You don't have to send any inputs but if you wanted to, you can spefify multiple options.
     It is fully compatible with scikit-learn pipelines and other models.
+
+    Inputs:
+        n_estimators: default is None. Number of models you want in the final ensemble.
+        base_estimator: default is None. Base model you want to train in each of the ensembles.
+        pipeline: default is False. It will transform all data to numeric automatically if set to True.
+        weights: default is False. It will perform weighting of different classifiers if set to True
+        imbalanced: default is False. It will activate a special imbalanced classifier if set to True.
+        verbose: default is 0. It will print verbose output if set to True.
+
+    Oututs:
+        SuloClassifier: returns a classification model highly tuned to your specific needs and dataset.
     """
     def __init__(self, base_estimator=None, n_estimators=None, pipeline=True, weights=False, 
                                        imbalanced=False, verbose=0):
@@ -2113,6 +2130,31 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
         self.regression_min_max = []
         self.model_name = ''
         self.features = []
+
+    def return_worst_fold(self, X):
+        """
+        This method returns the worst performing train and test rows among all the folds.
+        This is very important information since it helps an ML engineer or Data Scientist 
+            to trouble shoot time series problems. It helps to find where the model is struggling.
+
+        Inputs:
+        --------
+        X: Dataframe. This must be the features dataframe of your dataset. It cannot be a numpy array.
+
+        Outputs:
+        ---------
+        train_rows_dataframe, test_rows_dataframe: Dataframes. 
+             This returns the portion of X as train and test to help you understand where model struggled.
+        """
+        worst_fold = np.argmin(self.scores)
+        for i, (tr, tt) in enumerate(self.kf.split(X)):
+            if i == worst_fold:
+                worst_train_rows = copy.deepcopy(tr)
+                worst_ttest_rows = copy.deepcopy(tt)
+                print("fold %s: train rows index = %s. Sulo model struggled in this fold." %(i+1,tr))
+            else:
+                print("fold %s: train rows index = %s" %(i+1,tr))
+        return X.iloc[worst_train_rows], X.iloc[worst_ttest_rows]
 
     def fit(self, X, y):
         X = copy.deepcopy(X)
@@ -2221,9 +2263,11 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                 self.multi_label = y.columns.tolist()
                 ### You need to initialize the class before each run - otherwise, error!
                 ### Remember we don't to HPT Tuning for Multi-label problems since it errors ####
-                for i, (train_index, test_index) in enumerate(kfold.split(X)):
+                i = 0
+                for train_index, test_index in tqdm(kfold.split(X, y), total=kfold.get_n_splits(), desc="k-fold training"):
                     start_time = time.time()
-                    random_seed = np.random.randint(2,100)
+                    #random_seed = np.random.randint(2,100)
+                    random_seed = 9999
                     if self.base_estimator is None:
                         if self.max_number_of_classes <= 1:
                             ##############################################################
@@ -2381,31 +2425,33 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
 
                     # Use best classification metric to measure performance of model
                     if self.imbalanced:
-                        ### Use Regression predictions and convert them into classes here ##
+                        ### Use special priting program here ##
                         score = print_sulo_accuracy(y_test, preds, y_probas="", verbose=self.verbose)
-                        print("    Fold %s: Average OOF Score (higher is better): %0.3f" %(i+1, score))
+                        if self.verbose:
+                            print("    Fold %s: out-of-fold balanced_accuracy: %0.3f" %(i+1, score))
                     else:
                         score = print_accuracy(targets, y_test, preds, verbose=self.verbose)
-                        print("    Fold %s: Average OOF Score: %0.0f%%" %(i+1, 100*score))
+                        if self.verbose:
+                            print("    Fold %s: out-of-fold balanced_accuracy: %0.0f%%" %(i+1, 100*score))
                     self.scores.append(score)
                     
                     # Finally, check out the total time taken
                     end_time = time.time()
                     timeTaken = end_time - start_time
-                    print("Time Taken for fold %s: %0.0f (seconds)" %(i+1, timeTaken))
+                    if self.verbose:
+                        print("Time Taken for fold %s: %0.0f (seconds)" %(i+1, timeTaken))
+
+                    i += 1
 
                 # Compute average score
                 averageAccuracy = sum(self.scores)/len(self.scores)
-                if self.verbose:
-                    if self.imbalanced:
-                        print("Average Balanced Accuracy score of %s-model SuloClassifier: %0.3f" %(
-                                        self.n_estimators, averageAccuracy))
-                    else:                        
-                        print("Average Balanced Accuracy of %s-model SuloClassifier: %0.0f%%" %(
-                                        self.n_estimators, 100*averageAccuracy))
+                print("Final Balanced Accuracy score of %s-estimator SuloClassifier: %0.1f%%" %(
+                                self.n_estimators, 100*averageAccuracy))
+
                 end = time.time()
                 timeTaken = end - start
                 print("Time Taken overall: %0.0f (seconds)" %(timeTaken))
+                self.kf = kfold
                 return self
         ########################################################
         #####  This is for Single Label Classification problems 
@@ -2421,7 +2467,8 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
         est_list = num_iterations*[self.base_estimator]
         
         # Perform CV
-        for i, (train_index, test_index) in enumerate(kfold.split(X)):
+        i = 0
+        for train_index, test_index in tqdm(kfold.split(X, y), total=kfold.get_n_splits(), desc="k-fold training"):
             start_time = time.time()
             random_seed = np.random.randint(2,100)
             ##########  This is where we do multi-seed classifiers #########
@@ -2482,7 +2529,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                     if self.verbose:
                                         print('    Selecting Bagging Classifier for this dataset...')
                                     ET = ExtraTreeClassifier()
-                                    self.base_estimator = BaggingClassifier(base_estimartor=ET, n_jobs=-1)
+                                    self.base_estimator = BaggingClassifier(base_estimator=ET, n_jobs=-1)
                                     self.model_name = 'bg'
                                 else:
                                     if self.verbose:
@@ -2619,25 +2666,26 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
             if self.imbalanced:
                 ### Use Regression predictions and convert them into classes here ##
                 score = print_sulo_accuracy(y_test, preds, y_probas="", verbose=self.verbose)
-                print("    Fold %s: Average OOF Score (higher is better): %0.3f" %(i+1, score))
+                if self.verbose:
+                        print("    Fold %s: out-of-fold balanced accuracy: %0.3f" %(i+1, score))
             else:
                 #score = balanced_accuracy_score(y_test, preds)
                 score = print_accuracy(targets, y_test, preds, verbose=self.verbose)
-                print("    Fold %s: OOF Score: %0.0f%%" %(i+1, 100*score))
+                if self.verbose:
+                        print("    Fold %s: out-of-fold balanced accuracy: %0.0f%%" %(i+1, 100*score))
             self.scores.append(score)
+
+            i += 1
 
         # Compute average score
         averageAccuracy = sum(self.scores)/len(self.scores)
-        if self.verbose:
-            if self.imbalanced:
-                print("Average Balanced Accuracy of %s-model SuloClassifier: %0.3f" %(num_iterations, 100*averageAccuracy))
-            else:
-                print("Average Balanced Accuracy of %s-model SuloClassifier: %0.0f%%" %(num_iterations, 100*averageAccuracy))
+        print("Final balanced Accuracy of %s-estimator SuloClassifier: %0.1%%f" %(num_iterations, 100*averageAccuracy))
 
         # Finally, check out the total time taken
         end = time.time()
         timeTaken = end-start
         print("Time Taken: %0.0f (seconds)" %timeTaken)
+        self.kf = kfold
         return self
 
     def predict(self, X):
@@ -3184,27 +3232,37 @@ def rmse(y_actual, y_predicted):
 ##############################################################################
 class SuloRegressor(BaseEstimator, RegressorMixin):
     """
-    SuloRegressor works really fast and very well for all kinds of datasets.
-    It works on small as well as big data. It works in Integer mode as well as float-mode.
-    It works on regular balanced data as well as skewed regression targets.
+    SuloRegressor stands for Super Learning Optimized (SULO) Regressor.
+    -- It works on small as well as big data. It works in Integer mode as well as float-mode.
+    -- It works on regular balanced data as well as skewed regression targets.
     The reason it works so well is that Sulo is an ensemble of highly tuned models.
-    You don't have to send any inputs but if you wanted to, you can send in two inputs:
-    If you want, you can igore both these inputs and it will automatically choose these.
+    -- You don't have to send any inputs but if you wanted to, you can spefify multiple options.
     It is fully compatible with scikit-learn pipelines and other models.
 
     Inputs:
-    n_estimators: number of models you want in the final ensemble.
-    base_estimator: base model you want to train in each of the ensembles.
+        n_estimators: default is None. Number of models you want in the final ensemble.
+        base_estimator: default is None. Base model you want to train in each of the ensembles.
+        pipeline: default is False. It will transform all data to numeric automatically if set to True.
+        imbalanced: default is False. It will activate a special imbalanced Regressor if set to True.
+        integers_only: default is False. It will perform Integer regression if set to True
+        log_transform: default is False. It will perform log transform of target if set to True.
+        time_series: default is False. If set to True, expanding window Time Series split is performed.
+            If you input "sliding" here, then we will perform a sliding window time series split.
+        verbose: default is 0. It will print verbose output if set to True.
 
+    Oututs:
+        regressor: returns a regression model highly tuned to your specific needs and dataset.
     """
-    def __init__(self, base_estimator=None, n_estimators=None, pipeline=True, imbalanced=False, 
-                                       integers_only=False, log_transform=False, verbose=0):
+    def __init__(self, base_estimator=None, n_estimators=None, pipeline=False, imbalanced=False, 
+                                       integers_only=False, log_transform=False, 
+                                       time_series = False, verbose=0):
         self.n_estimators = n_estimators
         self.base_estimator = base_estimator
         self.pipeline = pipeline
         self.imbalanced = imbalanced
         self.integers_only = integers_only
         self.log_transform = log_transform
+        self.time_series = time_series 
         self.verbose = verbose
         self.models = []
         self.multi_label =  False
@@ -3275,7 +3333,24 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
         num_splits = self.n_estimators
         self.model_name = 'lgb'
         num_repeats = 1
-        kfold = RepeatedKFold(n_splits=num_splits, random_state=seed, n_repeats=num_repeats)
+        ####################################################################################
+        ########## Perform Time Series Split here ########################################
+        ####################################################################################
+        if self.time_series:
+            if isinstance(self.time_series, str):
+                if self.time_series == 'sliding':
+                    print('Performing sliding window time series split...')
+                    kfold = SlidingTimeSeriesSplit(n_splits=num_splits, fixed_length=True, train_splits=2, test_splits=1)
+                else:
+                    print('Performing expanding window time series split...')
+                    kfold = TimeSeriesSplit(n_splits=num_splits)
+            else:
+                print('Performing expanding window time series split...')
+                kfold = TimeSeriesSplit(n_splits=num_splits)
+        else:
+            print('Performing KFold regular split...')
+            kfold = RepeatedKFold(n_splits=num_splits, random_state=seed, n_repeats=num_repeats)
+        ####################################################################################
         num_iterations = int(num_splits * num_repeats)
         scoring = 'neg_mean_squared_error'
         print('    Num. estimators = %s (will be larger than n_estimators since kfold is repeated twice)' %num_iterations)
@@ -3283,10 +3358,14 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
         if isinstance(y, pd.DataFrame):
             if self.log_transform:
                 if self.verbose:
-                    print('    transforming targets into log targets')
-                y = np.log1p(y)
+                    print('    log transforming target variable: ensure no zeros in target. Otherwise error.')
+                try:
+                    y = np.log1p(y)
+                except:
+                    print('    Error: log transforming targets. Remove zeros in target and try again.')
+                    return self
             ###############################################################
-            ### This is for Multi-Label problems only #####################
+            ### This is for Multi-Label Regression problems only #####################
             ###############################################################
             targets = y.columns.tolist()
             if is_y_object(y):
@@ -3296,9 +3375,11 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
                 self.multi_label = y.columns.tolist()
                 ### You need to initialize the class before each run - otherwise, error!
                 ### Remember we don't to HPT Tuning for Multi-label problems since it errors ####
-                for i, (train_index, test_index) in enumerate(kfold.split(X)):
+                i = 0
+                for train_index, test_index in tqdm(kfold.split(X, y), total=kfold.get_n_splits(), desc="k-fold training"):
                     start_time = time.time()
-                    random_seed = np.random.randint(2,100)
+                    #random_seed = np.random.randint(2,100)
+                    random_seed = 999
                     if self.base_estimator is None:
                         ################################################################
                         ###   This is for Single Label Regression problems only ########
@@ -3399,26 +3480,36 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
                             ### Use Regression predictions and convert them into integers here ##
                             preds = np.round(preds,0).astype(int)
                             
-                    score = rmse(y_test, preds)
-                    print("    Fold %s: Average OOF Error (smaller is better): %0.3f" %(i+1, score))
+                    score = print_regression_model_stats(y_test, preds, self.verbose)
+                    if i == 0:
+                        y_stack = copy.deepcopy(y_test)
+                        pred_stack = copy.deepcopy(preds)
+                    else:
+                        y_stack = pd.concat([y_stack,y_test], axis=0)
+                        pred_stack = np.r_[pred_stack,preds]
+
+                    if self.verbose:
+                        print("    Fold %s: out-of-fold RMSE (smaller is better): %0.3f" %(i+1, score))
                     self.scores.append(score)
                     
                     # Finally, check out the total time taken
                     end_time = time.time()
                     timeTaken = end_time - start_time
-                    print("Time Taken for fold %s: %0.0f (seconds)" %(i+1, timeTaken))
+                    if self.verbose:
+                        print("Time Taken for fold %s: %0.0f (seconds)" %(i+1, timeTaken))
                 
+                    i += 1
+
                 # Compute average score
-                averageAccuracy = sum(self.scores)/len(self.scores)
-                if self.verbose:
-                    print("Average RMSE score of %s-model SuloRegressor: %0.3f" %(
-                                    num_iterations, averageAccuracy))
+                print("######## Final Regressor metrics: ##############")
+                normaverageAccuracy = print_regression_model_stats(y_stack, pred_stack, self.verbose)
                 end = time.time()
                 timeTaken = end - start
                 print("Time Taken overall: %0.0f (seconds)" %(timeTaken))
+                self.kf = kfold
                 return self
         ########################################################
-        #####  This is for Single Label Classification problems 
+        #####  This is for Single Label Regression problems 
         ########################################################
         if isinstance(y, pd.Series):
             targets = y.name
@@ -3435,7 +3526,8 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
         #### For now, don't do SMOTE since it is making things really slow ##
         
         # Perform CV
-        for i, (train_index, test_index) in enumerate(kfold.split(X)):
+        i = 0
+        for train_index, test_index in tqdm(kfold.split(X, y), total=kfold.get_n_splits(), desc="k-fold training"):
             start_time = time.time()
             random_seed = np.random.randint(2,100)
             if self.base_estimator is None:
@@ -3589,19 +3681,25 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
                 ### Use Regression predictions and convert them into integers here ##
                 preds = np.round(preds,0).astype(int)
 
-            score = rmse(y_test, preds)
-            print("    Fold %s: Average OOF Error (smaller is better): %0.3f" %(i+1, score))
+            score = print_regression_model_stats(y_test, preds)
+            if self.verbose:
+                print("    Fold %s: out-of-fold RMSE (smaller is better): %0.3f" %(i+1, score))
+                print("              Normalized RMSE (smaller is better): %0.3f" %(score/np.std(y_test)))
             self.scores.append(score)
+
+            i += 1
 
         # Compute average score
         averageAccuracy = sum(self.scores)/len(self.scores)
-        if self.verbose:
-            print("Average RMSE of %s-model SuloRegressor: %0.3f" %(num_iterations, averageAccuracy))
+        print("Final RMSE of %s-estimator SuloRegressor: %0.3f" %(num_iterations, averageAccuracy))
+        print("    Final Normalized RMSE: %0.3f" %(averageAccuracy/np.std(y_test)))
 
         # Finally, check out the total time taken
         end = time.time()
         timeTaken = end-start
         print("Time Taken: %0.0f (seconds)" %timeTaken)
+        self.kf = kfold
+
         return self
 
     def predict(self, X):
@@ -3628,8 +3726,33 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
         return y_predis
     
     def predict_proba(self, X):
-        print('In regression, no probabilities can be obtained.')
+        print('Error: In regression problems, no probabilities can be obtained. Returning...')
         return X
+
+    def return_worst_fold(self, X):
+        """
+        This method returns the worst performing train and test rows among all the folds.
+        This is very important information since it helps an ML engineer or Data Scientist 
+            to trouble shoot time series problems. It helps to find where the model is struggling.
+
+        Inputs:
+        --------
+        X: Dataframe. This must be the features dataframe of your dataset. It cannot be a numpy array.
+
+        Outputs:
+        ---------
+        train_rows_dataframe, test_rows_dataframe: Dataframes. 
+             This returns the portion of X as train and test to help you understand where model struggled.
+        """
+        worst_fold = np.argmax(self.scores)
+        for i, (tr, tt) in enumerate(self.kf.split(X)):
+            if i == worst_fold:
+                worst_train_rows = copy.deepcopy(tr)
+                worst_ttest_rows = copy.deepcopy(tt)
+                print("fold %s: train rows index = %s. Sulo model struggled in this fold." %(i+1,tr))
+            else:
+                print("fold %s: train rows index = %s" %(i+1,tr))
+        return X.iloc[worst_train_rows], X.iloc[worst_ttest_rows]
 
     def plot_importance(self, max_features=10):
         import lightgbm as lgbm
@@ -3698,11 +3821,159 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
         else:
             print('No feature importances available for this algorithm. Returning...')
             return
+##########################################################################################
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from itertools import cycle
+def print_regression_model_stats(actuals, predicted, verbose=0):
+    """
+    This program prints and returns MAE, RMSE, MAPE.
+    If you like the MAE and RMSE to have a title or something, just give that
+    in the input as "title" and it will print that title on the MAE and RMSE as a
+    chart for that model. Returns MAE, MAE_as_percentage, and RMSE_as_percentage
+    """
+    if isinstance(actuals,pd.Series) or isinstance(actuals,pd.DataFrame):
+        actuals = actuals.values
+    if isinstance(predicted,pd.Series) or isinstance(predicted,pd.DataFrame):
+        predicted = predicted.values
+    if len(actuals) != len(predicted):
+        if verbose:
+            print('Error: Number of rows in actuals and predicted dont match. Continuing...')
+        return np.inf
+    try:
+        ### This is for Multi_Label Problems ###
+        assert actuals.shape[1]
+        multi_label = True
+    except:
+        multi_label = False
+    if multi_label:
+        for i in range(actuals.shape[1]):
+            actuals_x = actuals[:,i]
+            try:
+                predicted_x = predicted[:,i]
+            except:
+                predicted_x = predicted[:]
+            if verbose:
+                print('for target %s:' %i)
+            each_rmse = print_regression_metrics(actuals_x, predicted_x, verbose)
+        final_rmse = np.mean(each_rmse)
+    else:
+        final_rmse = print_regression_metrics(actuals, predicted, verbose)
+    return final_rmse
+################################################################################
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, mean_absolute_percentage_error
+def print_regression_metrics(y_true, y_preds, verbose=0):
+    each_rmse = np.sqrt(mean_squared_error(y_true, y_preds))
+    if verbose:
+        print('    RMSE = %0.3f' %each_rmse)
+        print('    Norm RMSE = %0.0f%%' %(100*np.sqrt(mean_squared_error(y_true, y_preds))/np.std(y_true)))
+        print('    MAE = %0.3f'  %mean_absolute_error(y_true, y_preds))
+    if len(y_true[(y_true==0)]) > 0:
+        if verbose:
+            print('    WAPE = %0.0f%%, Bias = %0.0f%%' %(100*np.sum(np.abs(y_true-y_preds))/np.sum(y_true), 
+                        100*np.sum(y_true-y_preds)/np.sum(y_true)))
+            print('    No MAPE available since zeroes in actuals')
+    else:
+        if verbose:
+            print('    WAPE = %0.0f%%, Bias = %0.0f%%' %(100*np.sum(np.abs(y_true-y_preds))/np.sum(y_true), 
+                        100*np.sum(y_true-y_preds)/np.sum(y_true)))
+            print('    MAPE = %0.0f%%' %(100*mean_absolute_percentage_error(y_true, y_preds)))
+    print('    R-Squared = %0.0f%%' %(100*r2_score(y_true, y_preds)))
+    print()
+    return each_rmse
+################################################################################
+def print_static_rmse(actual, predicted, start_from=0,verbose=0):
+    """
+    this calculates the ratio of the rmse error to the standard deviation of the actuals.
+    This ratio should be below 1 for a model to be considered useful.
+    The comparison starts from the row indicated in the "start_from" variable.
+    """
+    rmse = np.sqrt(mean_squared_error(actual[start_from:],predicted[start_from:]))
+    std_dev = actual[start_from:].std()
+    if verbose >= 1:
+        print('    RMSE = %0.2f' %rmse)
+        print('    Std Deviation of Actuals = %0.2f' %(std_dev))
+        print('    Normalized RMSE = %0.1f%%' %(rmse*100/std_dev))
+    return rmse, rmse/std_dev
+################################################################################
+from sklearn.metrics import mean_squared_error,mean_absolute_error
+def print_rmse(y, y_hat):
+    """
+    Calculating Root Mean Square Error https://en.wikipedia.org/wiki/Root-mean-square_deviation
+    """
+    mse = np.mean((y - y_hat)**2)
+    return np.sqrt(mse)
+
+def print_mape(y, y_hat):
+    """
+    Calculating Mean Absolute Percent Error https://en.wikipedia.org/wiki/Mean_absolute_percentage_error
+    To avoid infinity due to division by zero, we select max(0.01, abs(actuals)) to show MAPE.
+    """
+    ### Wherever there is zero, replace it with 0.001 so it doesn't result in division by zero
+    perc_err = (100*(np.where(y==0,0.001,y) - y_hat))/np.where(y==0,0.001,y)
+    return np.mean(abs(perc_err))
+############################################################################################
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.utils import indexable
+from sklearn.utils.validation import _num_samples
+class SlidingTimeSeriesSplit(TimeSeriesSplit):
+    """
+    The SlidingTimeSeriesSplit is based on the following response from Stackoverflow:
+    https://stackoverflow.com/questions/58295242/sliding-window-train-test-split-for-time-series-data
+    Many thanks to the poster and author of this code snippet. 
+    I have modified it slightly to suit my needs.
+    """
+
+    def __init__(self, n_splits=5, groups=None, fixed_length=None, train_splits=2, test_splits=1):
+        self.n_splits = n_splits
+        self.groups = groups
+        self.fixed_length = fixed_length
+        self.train_splits = train_splits
+        self.test_splits = test_splits
+
+    def split(self, X, y=None):
+        groups = self.groups
+        fixed_length = self.fixed_length
+        train_splits = self.train_splits
+        test_splits = self.test_splits
+        n_splits = self.n_splits
+        ###################################
+        X, y, groups = indexable(X, y, groups)
+        n_samples = _num_samples(X)
+        n_splits = self.n_splits
+        n_folds = n_splits + 1
+        train_splits, test_splits = int(train_splits), int(test_splits)
+        if n_folds > n_samples:
+            raise ValueError(
+                ("Cannot have number of folds ={0} greater"
+                 " than the number of samples: {1}.").format(n_folds,
+                                                             n_samples))
+        if (n_folds - train_splits - test_splits) <= 0 and test_splits > 0:
+            raise ValueError(
+                ("Both train_splits and test_splits must be positive"
+                 " integers."))
+        indices = np.arange(n_samples)
+        split_size = (n_samples // n_folds)
+        test_size = split_size * test_splits
+        train_size = split_size * train_splits
+        test_starts = range(train_size + n_samples % n_folds,
+                            n_samples - (test_size - split_size),
+                            split_size)
+        if fixed_length:
+            for i, test_start in zip(range(len(test_starts)),
+                                     test_starts):
+                rem = 0
+                if i == 0:
+                    rem = n_samples % n_folds
+                yield (indices[(test_start - train_size - rem):test_start],indices[test_start:test_start + test_size])
+        else:
+            for test_start in test_starts:
+                yield (indices[:test_start],indices[test_start:test_start + test_size])
+
 ############################################################################################
 #########   This is where SULOCLASSIFIER and SULOREGRESSOR END   ###########################
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.96'
+version_number =  '0.97'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
