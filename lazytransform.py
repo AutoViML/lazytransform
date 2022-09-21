@@ -299,7 +299,10 @@ class My_LabelEncoder_Pipe(BaseEstimator, TransformerMixin):
         testk = testx.map(self.transformer) 
         
         if testx.isnull().sum().sum() > 0:
-            fillval = self.transformer[np.nan]
+            try:
+                fillval = self.transformer[np.nan]
+            except:
+                fillval = -1
             if testx.dtype not in [np.int16, np.int32, np.int64, float, bool, object]:
                 testk = testk.map(self.transformer).fillna(fillval).values.astype(int)
             else:
@@ -1017,16 +1020,17 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
             print('    Beware! %s encoding can create hundreds if not 1000s of variables...' %basic_encoder)
         else:
             pass
-    elif encoder in ['hashing','hash'] or basic_encoder in ['hashing', 'hash']:
+    ### Now try the other encoders that user has given as input ####################
+    if encoder in ['hashing','hash'] or basic_encoder in ['hashing', 'hash']:
         if verbose:
             print('    Beware! Hashing encoders can take a real long time for even small data sets!')
         else:
             pass
     elif encoder in non_one_hot_list or basic_encoder in non_one_hot_list:
         if verbose:
-            print('%s encoder selected for transforming all categorical variables')
+            print('%s encoder selected for transforming all categorical variables' %encoder)
     else:
-        print('encoder not found in list of encoders. Using auto instead')
+        print('%s encoder not found in list of encoders. Using auto instead' %encoder)
         encoders = 'auto'
         basic_encoder = 'label'
         encoder = 'label'
@@ -1704,6 +1708,7 @@ class LazyTransformer(TransformerMixin):
                 forest_importances.sort_values(ascending=False)[:max_features].plot(kind='barh')
             except:
                 print('Could not plot feature importances. Please check your model and try again.')
+
 
     def lightgbm_grid_search(self, X_train, y_train, modeltype,
                              params={}, grid_search=False, multi_label=False,
@@ -3968,12 +3973,115 @@ class SlidingTimeSeriesSplit(TimeSeriesSplit):
         else:
             for test_start in test_starts:
                 yield (indices[:test_start],indices[test_start:test_start + test_size])
+############################################################################################
+def rmspe(y, yhat):
+    return np.sqrt(np.mean((yhat/y-1) ** 2))
+
+def rmspe_xg(yhat, y):
+    y = np.power(10, y.get_label())
+    yhat = np.power(10, yhat)
+    return "rmspe", rmspe(y,yhat)
+#############################################################################################
+from sklearn.model_selection import train_test_split
+def xgboost_regressor( X_train, y_train, X_test, 
+                    log_transform=False, sparsity=False):
+    """
+    Perform training using XGBoost with a log based target transformation pipeline.
+    ######## Remember that we use this only for Regression problems ###############
+    This function uses log transformation of target variable to make it easier.
+    If sparsity is set, then target where zeros are set to small value such as 0.1.
+    This happens frequently in retail datasets where imbalanced datasets are common. 
+
+    Inputs:
+    X_train: can be array or DataFrame of train predictor values
+    y_train: can be array or DataFrame of train target values
+    X_test: can be array or dataframe of test predictor values
+
+    Output:
+    preds1: predictions on X_test which can be compared to y_test or submitted.
+    """
+    try:
+        import xgboost as xgb
+    except:
+        print('You must have xgboost installed in your machine to try this function.')
+        return
+    ###### If they give sparsity flag then set the target values toa low number ###
+    if sparsity:
+        print('Since sparsity is set True, modify target values at zero with a small 0.1 value...')
+        if isinstance(y_train, np.ndarray):
+            y_train[(y_train==0)] = 0.1
+        elif isinstance(y_train, pd.Series):
+            ### Since we want sparsity we are going to set target values that are zero as near zero
+            target = y_train.name
+            y_train.loc[(y_train[target]==0)] = 0.1
+            y_train = y_train.values
+        elif isinstance(y_train, pd.DataFrame):
+            targets = y_train.columns.tolist()
+            for each_target in targets:
+                y_train.loc[(y_train[each_target]==0), each_target] = 0.1
+
+    ##### This is where we start the split into train and valid to tune the model ###
+    start_time = time.time()
+    X_train1, X_valid, y_train1, y_valid = train_test_split(
+                X_train, y_train, test_size=0.02, random_state=10)
+    if log_transform:
+        y_train1 = np.log10(y_train1)
+        y_valid = np.log10(y_valid)
+    print(X_train1.shape, X_valid.shape)
+
+    ##### Now let us transform X_train1 and y_train1 with lazytransformer #####
+    lazy = LazyTransformer(model=None, encoders='label', scalers=None, 
+                        transform_target=False, verbose=1)
+    X_train1, y_train1 = lazy.fit_transform(X_train1, y_train1)
+    X_valid1, y_valid1 = lazy.transform(X_valid, y_valid)
+
+    ########   Now let's perform randomized search to find best hyper parameters ######
+    #### Model training using XGB ########
+    params = {"objective": "reg:squarederror",
+              "booster" : "gbtree",
+              "eta": 0.3,
+              "max_depth": 10,
+              "subsample": 0.9,
+              "colsample_bytree": 0.7,
+              "silent": 1,
+              "seed": 99
+              }
+    num_boost_round = 400
+    ##### now do the training ###########
+    dtrain = xgb.DMatrix(X_train1, y_train1)
+    dvalid = xgb.DMatrix(X_valid1, y_valid1)
+    ##########   Now we use rmspe_xg ###################
+    watchlist = [(dtrain, 'train'), (dvalid, 'eval')]
+    gbm = xgb.train(params, dtrain, num_boost_round, evals=watchlist, \
+      early_stopping_rounds=10, feval=rmspe_xg, verbose_eval=True)
+    print('Training Completed')
+
+    #### This is where you grid search the pipeline now ##############
+    print("Validating")
+    #### If it is not sparse data, you must still transform it into an array ###
+    if isinstance(y_valid1, pd.Series):
+        y_valid1 = y_valid1.values
+    elif isinstance(y_valid1, pd.DataFrame):
+        y_valid1 = y_valid1.values.ravel()
+    yhat = gbm.predict(xgb.DMatrix(X_valid1))
+    error = rmspe(y_valid1, yhat)
+    print('RMSPE: {:.6f}'.format(error))
+
+    ##### This is where we search for hyper params for model #######
+    X_test1 = lazy.transform(X_test)
+    dtest = xgb.DMatrix(X_test1)
+    preds1 = gbm.predict(dtest)
+    # Return predictions ###
+    if log_transform:
+        preds1 = np.power(10, preds1)
+
+    return preds1
 
 ############################################################################################
 #########   This is where SULOCLASSIFIER and SULOREGRESSOR END   ###########################
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.97'
+version_number =  '0.98'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
