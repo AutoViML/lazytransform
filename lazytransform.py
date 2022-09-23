@@ -1224,7 +1224,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
         scaler = MaxAbsScaler()
     else:
         if verbose:
-            print('    alert: there is no scaler specified. Options: max, std, robust, maxabs.')
+            print('    alert: there is no scaler specified. Options are: max, std, robust, maxabs.')
         scalers = ''
     ##########  define numeric vars as combo of float and integer variables    #########
     numvars = intvars + floatvars
@@ -1400,9 +1400,10 @@ class LazyTransformer(TransformerMixin):
         self.scalers = scalers
         self.imbalanced = imbalanced
         self.verbose = verbose
-        self.model = model
-        if not self.model:
-            self.model = None
+        
+        self.model_input = model
+        if not self.model_input:
+            self.model_input = None
         self.transform_target = transform_target
         self.fitted = False
         self.save = save
@@ -1413,7 +1414,7 @@ class LazyTransformer(TransformerMixin):
         return {"date_to_string": self.date_to_string, "encoders": self.encoders,
             "scalers": self.scalers, "imbalanced": self.imbalanced, 
             "verbose": self.verbose, "transform_target": self.transform_target,
-            "model": self.model, "combine_rare": self.combine_rare,}
+            "model": self.model_input, "combine_rare": self.combine_rare,}
 
     def set_params(self, **parameters):
         for parameter, value in parameters.items():
@@ -1461,45 +1462,45 @@ class LazyTransformer(TransformerMixin):
             self.yformer = YTransformer()
         #### This is where we build pipelines for X and y #############
         start_time = time.time()
-        if self.model is not None:
+        
+        if self.model_input is not None:
             ### If a model is given, then add it to pipeline and fit it ###
             data_pipe = make_simple_pipeline(X, y, encoders=self.encoders, scalers=self.scalers,
                 date_to_string=self.date_to_string, save_flag = self.save, 
                 combine_rare_flag=self.combine_rare, verbose=self.verbose)
             
             ### There is no YTransformer in this pipeline so targets must be single label only ##
-            model_name = str(self.model).split("(")[0]            
+            model_name = str(self.model_input).split("(")[0]            
             if y.ndim >= 2:
                 ### In some cases, if y is a DataFrame with one column also, you get these situations.
                 if y.shape[1] == 1:
                     ## In this case, y has only one column hence, you can use a model pipeline ##
                     if model_name == '': 
                         print('No model name specified')
-                        self.model = None
+                        self.model_input = None
                         ml_pipe = Pipeline([('data_pipeline', data_pipe),])
                     else:
-                        ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
+                        ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model_input)])
                 elif model_name == '': 
                     print('No model name specified')
-                    self.model = None
+                    self.model_input = None
                     ml_pipe = Pipeline([('data_pipeline', data_pipe),])
                 elif model_name not in ['MultiOutputClassifier','MultiOutputRegressor']:
                     ### In this case, y has more than 1 column, hence if it is not a multioutput model, give error
                     print('    Alert: Multi-Label problem - make sure your input model can do MultiOutput!')
-                    ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
+                    ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model_input)])
                 else:
                     ## In this case we have a multi output model. So let's use it ###
-                    #ml_pipe = make_pipeline(data_pipe, self.model)
-                    ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
+                    #ml_pipe = make_pipeline(data_pipe, self.model_input)
+                    ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model_input)])
             else:
                 ### You don't need YTransformer since it is a simple sklearn model
-                #ml_pipe = make_pipeline(data_pipe, self.model)
-                ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model)])
+                #ml_pipe = make_pipeline(data_pipe, self.model_input)
+                ml_pipe = Pipeline([('data_pipeline', data_pipe), ('model', self.model_input)])
             ##   Now we fit the model pipeline to X and y ###
             try:
                 
                 #### This is a very important set of statements ####
-                self.xformer = data_pipe.fit(X,y)
                 if self.transform_target:
                     if y is not None:
                         self.y_index = y.index
@@ -1509,22 +1510,22 @@ class LazyTransformer(TransformerMixin):
 
                     if y is not None:
                         yt.index = self.y_index
-                    ### Make sure you leave self.model as None when there is no model ### 
+                    ### Make sure you leave self.model_input as None when there is no model ### 
                     if model_name == '': 
-                        self.model = None
+                        self.model_input = None
                     else:
                         ml_pipe.fit(X,yt)
-                        self.model = ml_pipe
+                        self.xformer = ml_pipe
                 else:
                     ### Make sure you leave self.model as None when there is no model ### 
                     if model_name == '': 
                         self.model = None
                     else:
                         ml_pipe.fit(X,y)
-                        self.model = ml_pipe
+                        self.xformer = ml_pipe
             except Exception as e:
                 print('Erroring due to %s: There may be something wrong with your data types or inputs.' %e)
-                self.model = ml_pipe
+                self.xformer = ml_pipe
                 return self
             print('model pipeline fitted with %s model' %model_name)
             self.fitted = True
@@ -1542,9 +1543,11 @@ class LazyTransformer(TransformerMixin):
                 print('    transformed target from object type to numeric')
                 if y is not None:
                     yt.index = self.y_index
-                self.xformer = data_pipe.fit(X,yt)
+                data_pipe.fit(X,yt)
+                self.xformer = data_pipe 
             else:
-                self.xformer = data_pipe.fit(X,y)
+                data_pipe.fit(X,y)
+                self.xformer = data_pipe
             ## we will leave self.model as None ##
             self.fitted = True
         ### print imbalanced ###
@@ -1571,8 +1574,8 @@ class LazyTransformer(TransformerMixin):
         return self
 
     def predict(self, X, y=None):
-        if self.fitted and self.model is not None:
-            y_enc = self.model.predict(X)
+        if self.fitted and self.model_input is not None:
+            y_enc = self.xformer.predict(X)
             return y_enc
         else:
             print('Model not fitted or model not provided. Please check your inputs and try again')
@@ -1592,13 +1595,13 @@ class LazyTransformer(TransformerMixin):
             print('    Time taken to transform dataset = %s second(s)' %difftime)
             print('    Shape of transformed dataset: %s' %(X_enc.shape,))
             return X_enc
-        elif self.fitted and self.model is not None:
+        elif self.fitted and self.model_input is not None:
             print('Error: No transform allowed. You must use fit and predict when using a pipeline with a model.')
             return X, y
         elif not self.fitted:
             print('LazyTransformer has not been fit yet. Fit it first and try again.')
             return X, y
-        elif y is not None and self.fitted and self.model is None:
+        elif y is not None and self.fitted and self.model_input is None:
             if self.transform_target:
                 if y is not None:
                     self.y_index = y.index
@@ -1617,7 +1620,8 @@ class LazyTransformer(TransformerMixin):
                 X_enc, y_enc = sm.fit_resample(X_enc, y_enc)
                 self.imbalanced_first_done = True
                 self.smotex = sm
-            print('    SMOTE transformed data in pipeline. Dont forget to use transformed X and y from output.')
+                if self.verbose:
+                    print('    SMOTE transformed data in pipeline. Dont forget to use transformed X and y from output.')
             difftime = max(1, int(time.time()-start_time))
             print('    Time taken to transform dataset = %s second(s)' %difftime)
             print('    Shape of transformed dataset: %s' %(X_enc.shape,))
@@ -1667,18 +1671,12 @@ class LazyTransformer(TransformerMixin):
     def print_pipeline(self):
         from sklearn import set_config
         set_config(display="text")
-        if self.model:
-            return self.modelformer
-        else:
-            return self.xformer
+        return self.xformer
 
     def plot_pipeline(self):
         from sklearn import set_config
         set_config(display="diagram")
-        if self.model:
-            return self.modelformer
-        else:
-            return self.xformer
+        return self.xformer
 
     def plot_importance(self, max_features=10):
         import lightgbm as lgbm
@@ -2140,7 +2138,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
         """
         This method returns the worst performing train and test rows among all the folds.
         This is very important information since it helps an ML engineer or Data Scientist 
-            to trouble shoot time series problems. It helps to find where the model is struggling.
+            to trouble shoot classification problems. It helps to find where the model is struggling.
 
         Inputs:
         --------
@@ -2269,7 +2267,8 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                 ### You need to initialize the class before each run - otherwise, error!
                 ### Remember we don't to HPT Tuning for Multi-label problems since it errors ####
                 i = 0
-                for train_index, test_index in tqdm(kfold.split(X, y), total=kfold.get_n_splits(), desc="k-fold training"):
+                for train_index, test_index in tqdm(kfold.split(X, y), total=kfold.get_n_splits(),
+                                            desc="k-fold training"):
                     start_time = time.time()
                     #random_seed = np.random.randint(2,100)
                     random_seed = 9999
@@ -2336,12 +2335,12 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             if self.imbalanced:
                                 if self.verbose:
                                     print('    Selecting Self Paced ensemble classifier since imbalanced flag is set...')
-                                    try:
-                                        from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
-                                        self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
-                                    except:
-                                        print('pip install imbalanced_ensemble and re-run this again.')
-                                        return self
+                                try:
+                                    from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
+                                    self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
+                                except:
+                                    print('pip install imbalanced_ensemble and re-run this again.')
+                                    return self
                                 self.model_name = 'other'
                             else:
                                 if data_samples <= row_limit:
@@ -2427,17 +2426,17 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                         # Predict on remaining data of each fold
                         preds = model.predict(x_test)
 
-
+                    
                     # Use best classification metric to measure performance of model
                     if self.imbalanced:
                         ### Use special priting program here ##
                         score = print_sulo_accuracy(y_test, preds, y_probas="", verbose=self.verbose)
                         if self.verbose:
-                            print("    Fold %s: out-of-fold balanced_accuracy: %0.3f" %(i+1, score))
+                            print("    Fold %s: out-of-fold balanced_accuracy: %0.1f%%" %(i+1, 100*score))
                     else:
                         score = print_accuracy(targets, y_test, preds, verbose=self.verbose)
                         if self.verbose:
-                            print("    Fold %s: out-of-fold balanced_accuracy: %0.0f%%" %(i+1, 100*score))
+                            print("    Fold %s: out-of-fold balanced_accuracy: %0.1f%%" %(i+1, 100*score))
                     self.scores.append(score)
                     
                     # Finally, check out the total time taken
@@ -2473,10 +2472,12 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
         
         # Perform CV
         i = 0
-        for train_index, test_index in tqdm(kfold.split(X, y), total=kfold.get_n_splits(), desc="k-fold training"):
+        for train_index, test_index in tqdm(kfold.split(X, y), total=kfold.get_n_splits(), 
+                                        desc="k-fold training"):
             start_time = time.time()
             random_seed = np.random.randint(2,100)
             ##########  This is where we do multi-seed classifiers #########
+            
             if self.base_estimator is None:
                 if data_samples <= row_limit:
                     ### For small datasets use RFC for Binary Class   ########################
@@ -2484,11 +2485,12 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                         if self.imbalanced:
                             if self.verbose:
                                 print('    Selecting Self Paced ensemble classifier as base estimator...')
-                                try:
-                                    from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
-                                    self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
-                                except:
-                                    print('pip install imbalanced_ensemble and re-run this again.')
+                            try:
+                                from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
+                                self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
+                            except:
+                                print('pip install imbalanced_ensemble and re-run this again.')
+                                return self
                             self.model_name = 'other'
                         else:
                             ### For binary-class problems use RandomForest or the faster ET Classifier ######
@@ -2662,7 +2664,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
             
             model.fit(x_train, y_train)
             self.models.append(model)
-
+            
             # Predict on remaining data of each fold
             preds = model.predict(x_test)
 
@@ -2672,19 +2674,19 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                 ### Use Regression predictions and convert them into classes here ##
                 score = print_sulo_accuracy(y_test, preds, y_probas="", verbose=self.verbose)
                 if self.verbose:
-                        print("    Fold %s: out-of-fold balanced accuracy: %0.3f" %(i+1, score))
+                        print("    Fold %s: out-of-fold balanced accuracy: %0.1f%%" %(i+1, 100*score))
             else:
                 #score = balanced_accuracy_score(y_test, preds)
                 score = print_accuracy(targets, y_test, preds, verbose=self.verbose)
                 if self.verbose:
-                        print("    Fold %s: out-of-fold balanced accuracy: %0.0f%%" %(i+1, 100*score))
+                        print("    Fold %s: out-of-fold balanced accuracy: %0.1f%%" %(i+1, 100*score))
             self.scores.append(score)
 
             i += 1
 
         # Compute average score
         averageAccuracy = sum(self.scores)/len(self.scores)
-        print("Final balanced Accuracy of %s-estimator SuloClassifier: %0.1%%f" %(num_iterations, 100*averageAccuracy))
+        print("Final balanced Accuracy of %s-estimator SuloClassifier: %0.1f%%" %(num_iterations, 100*averageAccuracy))
 
         # Finally, check out the total time taken
         end = time.time()
@@ -2727,7 +2729,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
     def print_pipeline(self):
         from sklearn import set_config
         set_config(display="text")
-        return self.modelformer
+        return self.xformer
 
     def plot_pipeline(self):
         from sklearn import set_config
@@ -3381,7 +3383,8 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
                 ### You need to initialize the class before each run - otherwise, error!
                 ### Remember we don't to HPT Tuning for Multi-label problems since it errors ####
                 i = 0
-                for train_index, test_index in tqdm(kfold.split(X, y), total=kfold.get_n_splits(), desc="k-fold training"):
+                for train_index, test_index in tqdm(kfold.split(X, y), total=kfold.get_n_splits(), 
+                                        desc="k-fold training"):
                     start_time = time.time()
                     #random_seed = np.random.randint(2,100)
                     random_seed = 999
@@ -3532,7 +3535,8 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
         
         # Perform CV
         i = 0
-        for train_index, test_index in tqdm(kfold.split(X, y), total=kfold.get_n_splits(), desc="k-fold training"):
+        for train_index, test_index in tqdm(kfold.split(X, y), total=kfold.get_n_splits(), 
+                                            desc="k-fold training"):
             start_time = time.time()
             random_seed = np.random.randint(2,100)
             if self.base_estimator is None:
@@ -3697,7 +3701,7 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
         # Compute average score
         averageAccuracy = sum(self.scores)/len(self.scores)
         print("Final RMSE of %s-estimator SuloRegressor: %0.3f" %(num_iterations, averageAccuracy))
-        print("    Final Normalized RMSE: %0.3f" %(averageAccuracy/np.std(y_test)))
+        print("    Final Normalized RMSE: %0.1f%%" %(100*averageAccuracy/np.std(y_test)))
 
         # Finally, check out the total time taken
         end = time.time()
@@ -3977,14 +3981,17 @@ class SlidingTimeSeriesSplit(TimeSeriesSplit):
 def rmspe(y, yhat):
     return np.sqrt(np.mean((yhat/y-1) ** 2))
 
-def rmspe_xg(yhat, y):
+def rmspe_xg_log(yhat, y):
     y = np.power(10, y.get_label())
     yhat = np.power(10, yhat)
     return "rmspe", rmspe(y,yhat)
+
+def rmspe_xg(yhat, y):
+    return "rmspe", rmspe(y.get_label(),yhat)
 #############################################################################################
 from sklearn.model_selection import train_test_split
 def xgboost_regressor( X_train, y_train, X_test, 
-                    log_transform=False, sparsity=False):
+                    log_transform=False, sparsity=False, eta=0.1):
     """
     Perform training using XGBoost with a log based target transformation pipeline.
     ######## Remember that we use this only for Regression problems ###############
@@ -4007,18 +4014,19 @@ def xgboost_regressor( X_train, y_train, X_test,
         return
     ###### If they give sparsity flag then set the target values toa low number ###
     if sparsity:
-        print('Since sparsity is set True, modify target values at zero with a small 0.1 value...')
+        print('Since sparsity is set True, replace zero valued target rows with a small 0.1 value...')
         if isinstance(y_train, np.ndarray):
             y_train[(y_train==0)] = 0.1
         elif isinstance(y_train, pd.Series):
             ### Since we want sparsity we are going to set target values that are zero as near zero
             target = y_train.name
-            y_train.loc[(y_train[target]==0)] = 0.1
-            y_train = y_train.values
+            if len(y_train.loc[(y_train==0)]) > 0:
+                y_train.loc[(y_train==0)] = 0.1
         elif isinstance(y_train, pd.DataFrame):
             targets = y_train.columns.tolist()
             for each_target in targets:
-                y_train.loc[(y_train[each_target]==0), each_target] = 0.1
+                if len(y_train.loc[(y_train[each_target]==0)]) > 0:
+                    y_train.loc[(y_train[each_target]==0), each_target] = 0.1
 
     ##### This is where we start the split into train and valid to tune the model ###
     start_time = time.time()
@@ -4030,19 +4038,16 @@ def xgboost_regressor( X_train, y_train, X_test,
     print(X_train1.shape, X_valid.shape)
 
     ##### Now let us transform X_train1 and y_train1 with lazytransformer #####
-    lazy = LazyTransformer(model=None, encoders='label', scalers=None, 
-                        transform_target=False, verbose=1)
+    lazy = LazyTransformer(model=None, encoders='label', scalers='', 
+                        transform_target=False, imbalanced=False, verbose=1)
     X_train1, y_train1 = lazy.fit_transform(X_train1, y_train1)
     X_valid1, y_valid1 = lazy.transform(X_valid, y_valid)
 
     ########   Now let's perform randomized search to find best hyper parameters ######
-    #### Model training using XGB ########
+    print('#### Model training using XGB ######## eta = %s' %eta)
     params = {"objective": "reg:squarederror",
               "booster" : "gbtree",
-              "eta": 0.3,
-              "max_depth": 10,
-              "subsample": 0.9,
-              "colsample_bytree": 0.7,
+              "eta": eta,
               "silent": 1,
               "seed": 99
               }
@@ -4051,9 +4056,13 @@ def xgboost_regressor( X_train, y_train, X_test,
     dtrain = xgb.DMatrix(X_train1, y_train1)
     dvalid = xgb.DMatrix(X_valid1, y_valid1)
     ##########   Now we use rmspe_xg ###################
+    if log_transform:
+        feval = rmspe_xg_log
+    else:
+        feval = rmspe_xg
     watchlist = [(dtrain, 'train'), (dvalid, 'eval')]
     gbm = xgb.train(params, dtrain, num_boost_round, evals=watchlist, \
-      early_stopping_rounds=10, feval=rmspe_xg, verbose_eval=True)
+      early_stopping_rounds=10, feval=feval, verbose_eval=True)
     print('Training Completed')
 
     #### This is where you grid search the pipeline now ##############
@@ -4081,7 +4090,7 @@ def xgboost_regressor( X_train, y_train, X_test,
 #########   This is where SULOCLASSIFIER and SULOREGRESSOR END   ###########################
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '0.98'
+version_number =  '0.99'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
