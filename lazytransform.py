@@ -3887,7 +3887,7 @@ def print_regression_metrics(y_true, y_preds, verbose=0):
                         100*np.sum(y_true-y_preds)/np.sum(y_true)))
             print('    MAPE = %0.0f%%' %(100*mean_absolute_percentage_error(y_true, y_preds)))
     print('    R-Squared = %0.0f%%' %(100*r2_score(y_true, y_preds)))
-    print()
+    plot_regression(y_true, y_preds, chart='scatter')
     return each_rmse
 ################################################################################
 def print_static_rmse(actual, predicted, start_from=0,verbose=0):
@@ -3920,6 +3920,28 @@ def print_mape(y, y_hat):
     ### Wherever there is zero, replace it with 0.001 so it doesn't result in division by zero
     perc_err = (100*(np.where(y==0,0.001,y) - y_hat))/np.where(y==0,0.001,y)
     return np.mean(abs(perc_err))
+    
+import matplotlib.pyplot as plt
+def plot_regression(actuals, predicted, chart='line'):
+    """
+    This function plots the actuals vs. predicted as a line plot.
+    You can change the chart type to "scatter' to get a scatter plot.
+    """
+    number_as_percentage = actuals.std()
+    plt.figure(figsize=(10,10))
+    if not isinstance(actuals, np.ndarray):
+        actuals = actuals.values
+    dfplot = pd.DataFrame([actuals,predicted]).T
+    dfplot.columns = ['Actual','Forecast']
+    dfplot = dfplot.sort_index()
+    if chart == 'line':
+        plt.plot(dfplot)
+    else:
+        plt.scatter(dfplot['Actual'],dfplot['Forecast'])
+    plt.legend(['actual','forecast'])
+    plt.axis('scaled')
+    plt.title('Actuals vs Predicted', fontsize=20);
+
 ############################################################################################
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.utils import indexable
@@ -4051,7 +4073,7 @@ def xgboost_regressor( X_train, y_train, X_test,
               "silent": 1,
               "seed": 99
               }
-    num_boost_round = 400
+    num_boost_round = 500
     ##### now do the training ###########
     dtrain = xgb.DMatrix(X_train1, y_train1)
     dvalid = xgb.DMatrix(X_valid1, y_valid1)
@@ -4085,6 +4107,101 @@ def xgboost_regressor( X_train, y_train, X_test,
         preds1 = np.power(10, preds1)
 
     return preds1
+#################################################################################
+from scipy.stats import probplot,skew
+def _data_suggestions(data):
+    """
+    Modified by Ram Seshadri. Original idea for data suggestions module was a Kaggler. 
+    Many thanks to: https://www.kaggle.com/code/itkin16/catboost-on-gpu-baseline
+    """
+    maxx = []
+    minn = []
+    cat_cols1 = data.select_dtypes(include='object').columns.tolist()
+    cat_cols2 = data.select_dtypes(include='category').columns.tolist()
+    cat_cols = list(set(cat_cols1+cat_cols2))
+    num_cols = data.select_dtypes(include='float').columns.tolist()
+
+    for i in data.columns:
+        if i not in cat_cols:
+            ### for float and integer, no need to calculate this ##
+            minn.append(0)
+        else:
+            minn.append(data[i].value_counts().min())
+    length = len(data)
+    nunik = data.nunique()
+    nulls = data.isna().sum()
+    df = pd.DataFrame(
+        {
+         #'column': list(data),
+        'Nuniques': nunik,
+         'NuniquePercent': (100*(nunik/length)),
+         'dtype': data.dtypes,
+         'Nulls' : nulls,
+         'Nullpercent' : 100*(nulls/length),
+         'Value counts Min':minn 
+        },
+        columns = ['Nuniques', 'dtype','Nulls','Nullpercent', 'NuniquePercent',
+                       'Value counts Min']).sort_values(by ='Nuniques',ascending = False)
+    newcol = 'Data cleaning improvement suggestions'
+    mixed_cols = [col for col in data.columns if len(data[col].apply(type).value_counts()) > 1]
+    df[newcol] = ''
+    df['first_comma'] = ''
+    if len(cat_cols) > 0:
+        mask0 = df['dtype'] == 'object'
+        mask1 = df['Value counts Min']/df['Nuniques'] <= 0.05
+        df.loc[mask0&mask1,newcol] += df.loc[mask0&mask1,'first_comma'] + 'combine rare categories'
+        df.loc[mask0&mask1,'first_comma'] = ', '
+    mask2 = df['Nulls'] > 0
+    df.loc[mask2,newcol] += df.loc[mask2,'first_comma'] + 'fill missing values'
+    df.loc[mask2,'first_comma'] = ", "
+    mask3 = df['Nuniques'] == 1
+    df.loc[mask3,newcol] += df.loc[mask3,'first_comma'] + 'invariant values: drop column'
+    df.loc[mask3,'first_comma'] = ", "
+    mask4 = df['NuniquePercent'] == 100
+    df.loc[mask4,newcol] += df.loc[mask4,'first_comma'] + 'possible ID column: drop'
+    df.loc[mask4,'first_comma'] = ", "
+    mask5 = df['Nullpercent'] >= 90
+    df.loc[mask5,newcol] += df.loc[mask5,'first_comma'] + 'very high nulls percent: drop column'
+    df.loc[mask5,'first_comma'] = ", "
+    #### check for infinite values here #####
+    inf_cols1 = np.array(num_cols)[[(data.loc[(data[col] == np.inf)]).shape[0]>0 for col in num_cols]].tolist()
+    inf_cols2 = np.array(num_cols)[[(data.loc[(data[col] == -np.inf)]).shape[0]>0 for col in num_cols]].tolist()
+    inf_cols = list(set(inf_cols1+inf_cols2))
+    ### Check for infinite values in columns #####
+    if len(inf_cols) > 0:
+        for x in inf_cols:
+            df.loc[x,newcol] += df.loc[x,'first_comma'] + 'infinite values: drop'
+            df.loc[x,'first_comma'] = ", "
+    #### Check for skewed float columns #######
+    skew_cols1 = np.array(num_cols)[[(np.abs(np.round(data[col].skew(), 1)) > 1
+                    ) & (np.abs(np.round(data[col].skew(), 1)) <= 5) for col in num_cols]].tolist()
+    skew_cols2 = np.array(num_cols)[[(np.abs(np.round(data[col].skew(), 1)) > 5) for col in num_cols]].tolist()
+    skew_cols = list(set(skew_cols1+skew_cols2))
+    ### Check for skewed values in columns #####
+    if len(skew_cols1) > 0:
+        for x in skew_cols1:
+            df.loc[x,newcol] += df.loc[x,'first_comma'] + 'skewed column: cap or drop possible outliers'
+            df.loc[x,'first_comma'] = ", "
+    if len(skew_cols2) > 0:
+        for x in skew_cols2:
+            df.loc[x,newcol] += df.loc[x,'first_comma'] + 'highly skewed column: remove outliers or do box-cox transform'
+            df.loc[x,'first_comma'] = ", "
+    ##### Do the same for mixed dtype columns - they must be fixed! ##
+    if len(mixed_cols) > 0:
+        for x in mixed_cols:
+            df.loc[x,newcol] += df.loc[x,'first_comma'] + 'fix mixed data types'
+            df.loc[x,'first_comma'] = ", "
+    df.drop('first_comma', axis=1, inplace=True)
+    return df
+###################################################################################
+def data_suggestions(X):
+    if isinstance(X, pd.DataFrame):
+        dfx = _data_suggestions(X)
+        all_rows = dfx.shape[0]
+        ax = dfx.head(all_rows).style.background_gradient(cmap='Reds').set_properties(**{'font-family': 'Segoe UI'})
+        display(ax);
+    else:
+        print("Input must be a dataframe. Please check input and try again.")
 
 ############################################################################################
 #########   This is where SULOCLASSIFIER and SULOREGRESSOR END   ###########################
