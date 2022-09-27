@@ -337,7 +337,10 @@ def classify_vars_pandas(df, verbose=0):
     var_dict = defaultdict(list)
     #### To select all numeric types, use np.number or 'number'
     intvars = df.select_dtypes(include='integer').columns.tolist()
-    floatvars = df.select_dtypes(include='float').columns.tolist()
+    ### Because of differences in pandas versions, floats don't get detected easily
+    ###  Hence I am forced to write clumsily like this. Don't change the next line!!
+    floatvars = df.select_dtypes(include='float16').columns.tolist() + df.select_dtypes(
+                include='float32').columns.tolist() + df.select_dtypes(include='float64').columns.tolist()
     inf_cols = EDA_find_remove_columns_with_infinity(df)
     numvars = left_subtract(floatvars, inf_cols)
     var_dict['continuous_vars'] = floatvars
@@ -3921,27 +3924,36 @@ def print_mape(y, y_hat):
     perc_err = (100*(np.where(y==0,0.001,y) - y_hat))/np.where(y==0,0.001,y)
     return np.mean(abs(perc_err))
     
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+from itertools import cycle
 import matplotlib.pyplot as plt
-def plot_regression(actuals, predicted, chart='line'):
+def plot_regression(actuals, predicted, chart='scatter'):
     """
     This function plots the actuals vs. predicted as a line plot.
     You can change the chart type to "scatter' to get a scatter plot.
     """
-    number_as_percentage = actuals.std()
-    plt.figure(figsize=(10,10))
+    figsize = (10, 10)
+    colors = cycle('byrcmgkbyrcmgkbyrcmgkbyrcmgk')
+    plt.figure(figsize=figsize)
     if not isinstance(actuals, np.ndarray):
         actuals = actuals.values
     dfplot = pd.DataFrame([actuals,predicted]).T
     dfplot.columns = ['Actual','Forecast']
     dfplot = dfplot.sort_index()
+    lineStart = actuals.min()
+    lineEnd = actuals.max()
     if chart == 'line':
         plt.plot(dfplot)
     else:
-        plt.scatter(dfplot['Actual'],dfplot['Forecast'])
-    plt.legend(['actual','forecast'])
-    plt.axis('scaled')
-    plt.title('Actuals vs Predicted', fontsize=20);
-
+        plt.scatter(actuals, predicted, color = next(colors), alpha=0.5,label='Predictions')
+        plt.plot([lineStart, lineEnd], [lineStart, lineEnd], 'k-', color = next(colors))
+        plt.xlim(lineStart, lineEnd)
+        plt.ylim(lineStart, lineEnd)
+    plt.xlabel('Actual')
+    plt.ylabel('Predicted')
+    plt.legend()
+    plt.title('Model: Predicted vs Actuals', fontsize=12)
+    plt.show();
 ############################################################################################
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.utils import indexable
