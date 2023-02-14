@@ -2282,7 +2282,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             ##############################################################
                             if self.imbalanced:
                                 try:
-                                    from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
+                                    from imbens.ensemble import SelfPacedEnsembleClassifier
                                     self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                                 except:
                                     print('pip install imbalanced_ensemble and re-run this again.')
@@ -2339,7 +2339,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                 if self.verbose:
                                     print('    Selecting Self Paced ensemble classifier since imbalanced flag is set...')
                                 try:
-                                    from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
+                                    from imbens.ensemble import SelfPacedEnsembleClassifier
                                     self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                                 except:
                                     print('pip install imbalanced_ensemble and re-run this again.')
@@ -2489,7 +2489,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             if self.verbose:
                                 print('    Selecting Self Paced ensemble classifier as base estimator...')
                             try:
-                                from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
+                                from imbens.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                             except:
                                 print('pip install imbalanced_ensemble and re-run this again.')
@@ -2521,7 +2521,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             if self.verbose:
                                 print('    Selecting Self Paced ensemble classifier as base estimator...')
                             try:
-                                from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
+                                from imbens.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                             except:
                                 print('pip install imbalanced_ensemble and re-run this again.')
@@ -2563,7 +2563,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             if self.verbose:
                                 print('    Selecting Self Paced ensemble classifier as base estimator...')
                             try:
-                                from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
+                                from imbens.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                             except:
                                 print('pip install imbalanced_ensemble and re-run this again.')
@@ -2592,7 +2592,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             if self.verbose:
                                 print('    Selecting Self Paced ensemble classifier as base estimator...')
                             try:
-                                from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
+                                from imbens.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                             except:
                                 print('pip install imbalanced_ensemble and re-run this again.')
