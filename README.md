@@ -1,7 +1,6 @@
 # lazytransform
 Automatically transform all categorical, date-time, NLP variables in your data set to numeric in a single line of code for any data set any size.
 
-<a href="https://github.com/AutoViML/lazytransform"><img src="https://i.ibb.co/WktFktL/lazytransformer.png" alt="lazytransformer" border="0"></a>
 ## Update (Aug 2022)
 <ol>
 <li><b>lazytransform is very easy to install on Kaggle and Colab notebooks using this command:</b>. 
@@ -40,7 +39,7 @@ We ran a similar benchmarking result in SuloRegressor against XGBoost and LightG
 ### What is lazytransform?
 `lazytransform` is a new python library for automatically transforming your entire dataset to numeric format using category encoders, NLP text vectorizers and pandas date time processing functions. All in a single line of code!
 
-<a href="https://github.com/AutoViML/lazytransform"><img src="https://i.ibb.co/nzYxs8k/lazytransformer.png" alt="lazytransformer" border="0"></a>
+![lazytransformer](./images/lazytransformer.jpg)
 
 ## Uses
 `lazytransform` has two important uses in the Data Science process. It can be used in Feature Engg to transform features or add features (see API below). It can also be used in MLOps to train and evaluate models in data pipelines with multiple models being trained simultaneusly using the same train/test split and the same feature engg steps. This ensures that there is absolutely zero or minimal data leakage in your MLOps pipelines.
