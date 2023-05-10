@@ -19,7 +19,6 @@ setuptools.setup(
     "numpy~=1.20.3",
     "pandas~=1.2.4",
     "scikit-learn~=0.24.2",
-    "scipy>=1.6.3",
     "python-dateutil~=2.8.1",
     "lightgbm>=3.2.1",
     "imbalanced-learn>=0.8.0",
