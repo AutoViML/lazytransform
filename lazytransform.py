@@ -88,6 +88,55 @@ from sklearn.pipeline import make_pipeline, Pipeline
 #from sklearn.preprocessing import OneHotEncoder
 from tqdm import tqdm
 from sklearn.model_selection import TimeSeriesSplit
+import numpy as np
+import pandas as pd
+################################################################################
+import warnings
+warnings.filterwarnings("ignore")
+from sklearn.exceptions import DataConversionWarning
+warnings.filterwarnings(action='ignore', category=DataConversionWarning)
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+################################################################################
+import math
+from collections import Counter
+from sklearn.linear_model import Ridge, Lasso, RidgeCV
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, AdaBoostClassifier
+from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+from sklearn.multiclass import OneVsRestClassifier, OneVsOneClassifier
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import KFold, StratifiedKFold
+import time
+from sklearn.cluster import KMeans
+from matplotlib.pyplot import figure
+from sklearn.metrics.cluster import normalized_mutual_info_score
+from sklearn.metrics import balanced_accuracy_score
+from sklearn.ensemble import VotingRegressor, VotingClassifier
+import copy
+from sklearn.base import BaseEstimator, TransformerMixin, RegressorMixin, clone
+from sklearn.base import ClassifierMixin, RegressorMixin
+from imblearn.over_sampling import SMOTENC, ADASYN
+from imblearn.over_sampling import SMOTE, SVMSMOTE
+from imblearn.combine import SMOTETomek 
+import lightgbm
+from lightgbm import LGBMClassifier, LGBMRegressor
+from xgboost import XGBRegressor, XGBClassifier
+from sklearn.multioutput import MultiOutputRegressor, MultiOutputClassifier
+from sklearn.multioutput import ClassifierChain, RegressorChain
+import scipy as sp
+import pdb
+from sklearn.semi_supervised import LabelPropagation
+from sklearn.ensemble import BaggingClassifier, BaggingRegressor
+from sklearn.svm import SVR, LinearSVR
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer, MissingIndicator
+#from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
+from sklearn.compose import ColumnTransformer
+from scipy.stats import uniform as sp_randFloat
+from scipy.stats import randint as sp_randInt
+
 #########################################################
 class My_LabelEncoder(BaseEstimator, TransformerMixin):
     """
@@ -562,9 +611,7 @@ def create_column_names(Xt, nlpvars=[], catvars=[], discretevars=[], floatvars=[
         df = pd.concat([Xint, Xnum], axis=1)
         return df
 #############################################################################################################
-import random
 import collections
-random.seed(10)
 def make_column_names_unique(cols):
     ser = pd.Series(cols)
     ### This function removes all special chars from a list ###
@@ -1371,10 +1418,11 @@ class LazyTransformer(TransformerMixin):
             converted to numbers and treated as numeric. If False, target(s)
             will be left as they are and not converted.
     imbalanced : default is False. If True, we will try SMOTE if no model is input.
-            Additionally, if a model is also given as input, then that base model will be
-            wrapped in a Super Learning Optimized (SULO) ensemble model
-            called SuloClassifier which is a performant stacking model that
-            train on your imbalanced data set. If False, your data will be 
+            Alternatively, if a model is given as input, then SMOTE will not be used.
+            Instead, we will wrap that given estimator into a
+            a Super Learning Optimized (SULO) ensemble model
+            called SuloClassifier will will perform stacking that will
+            train on your imbalanced data set. If imbalanced=False, your data will be 
             left as is and nothing will be done to it.
     save : default is False. If True, it will save the data and model pipeline in a 
             pickle file in the current working directory under "LazyTransformer_pipeline.pkl"
@@ -2051,55 +2099,6 @@ def check_if_GPU_exists():
 ############################################################################################
 ####        This is where SULO CLASSIFIER AND REGRESSOR ARE DEFINED          ###############
 ############################################################################################
-import numpy as np
-import pandas as pd
-################################################################################
-import warnings
-warnings.filterwarnings("ignore")
-from sklearn.exceptions import DataConversionWarning
-warnings.filterwarnings(action='ignore', category=DataConversionWarning)
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-################################################################################
-import math
-from collections import Counter
-from sklearn.linear_model import Ridge, Lasso, RidgeCV
-from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, AdaBoostClassifier
-from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor
-from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
-from sklearn.multiclass import OneVsRestClassifier, OneVsOneClassifier
-from sklearn.metrics import accuracy_score
-from sklearn.model_selection import KFold, StratifiedKFold
-import time
-from sklearn.cluster import KMeans
-from matplotlib.pyplot import figure
-from sklearn.metrics.cluster import normalized_mutual_info_score
-from sklearn.metrics import balanced_accuracy_score
-from sklearn.ensemble import VotingRegressor, VotingClassifier
-import copy
-from sklearn.base import BaseEstimator, TransformerMixin, RegressorMixin, clone
-from sklearn.base import ClassifierMixin, RegressorMixin
-from imblearn.over_sampling import SMOTENC, ADASYN
-from imblearn.over_sampling import SMOTE, SVMSMOTE
-from imblearn.combine import SMOTETomek 
-import lightgbm
-from lightgbm import LGBMClassifier, LGBMRegressor
-from xgboost import XGBRegressor, XGBClassifier
-from sklearn.multioutput import MultiOutputRegressor, MultiOutputClassifier
-from sklearn.multioutput import ClassifierChain, RegressorChain
-import scipy as sp
-import pdb
-from sklearn.semi_supervised import LabelPropagation
-from sklearn.ensemble import BaggingClassifier, BaggingRegressor
-from sklearn.svm import SVR, LinearSVR
-from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer, MissingIndicator
-#from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
-from sklearn.compose import ColumnTransformer
-from scipy.stats import uniform as sp_randFloat
-from scipy.stats import randint as sp_randInt
-
 class SuloClassifier(BaseEstimator, ClassifierMixin):
     """
     SuloClassifier stands for Super Learning Optimized (SULO) Classifier.
@@ -2288,7 +2287,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             ##############################################################
                             if self.imbalanced:
                                 try:
-                                    from imbens.ensemble import SelfPacedEnsembleClassifier
+                                    from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                     self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                                 except:
                                     print('pip install imbalanced_ensemble and re-run this again.')
@@ -2345,7 +2344,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                 if self.verbose:
                                     print('    Selecting Self Paced ensemble classifier since imbalanced flag is set...')
                                 try:
-                                    from imbens.ensemble import SelfPacedEnsembleClassifier
+                                    from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                     self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                                 except:
                                     print('pip install imbalanced_ensemble and re-run this again.')
@@ -2495,7 +2494,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             if self.verbose:
                                 print('    Selecting Self Paced ensemble classifier as base estimator...')
                             try:
-                                from imbens.ensemble import SelfPacedEnsembleClassifier
+                                from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                             except:
                                 print('pip install imbalanced_ensemble and re-run this again.')
@@ -2527,7 +2526,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             if self.verbose:
                                 print('    Selecting Self Paced ensemble classifier as base estimator...')
                             try:
-                                from imbens.ensemble import SelfPacedEnsembleClassifier
+                                from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                             except:
                                 print('pip install imbalanced_ensemble and re-run this again.')
@@ -2569,7 +2568,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             if self.verbose:
                                 print('    Selecting Self Paced ensemble classifier as base estimator...')
                             try:
-                                from imbens.ensemble import SelfPacedEnsembleClassifier
+                                from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                             except:
                                 print('pip install imbalanced_ensemble and re-run this again.')
@@ -2598,7 +2597,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             if self.verbose:
                                 print('    Selecting Self Paced ensemble classifier as base estimator...')
                             try:
-                                from imbens.ensemble import SelfPacedEnsembleClassifier
+                                from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                             except:
                                 print('pip install imbalanced_ensemble and re-run this again.')
@@ -3885,7 +3884,11 @@ def print_regression_model_stats(actuals, predicted, verbose=0):
         final_rmse = print_regression_metrics(actuals, predicted, verbose)
     return final_rmse
 ################################################################################
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, mean_absolute_percentage_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+def MAPE(y_true, y_pred): 
+  y_true, y_pred = np.array(y_true), np.array(y_pred)
+  return np.mean(np.abs((y_true - y_pred) / np.maximum(np.ones(len(y_true)), np.abs(y_true))))*100
+
 def print_regression_metrics(y_true, y_preds, verbose=0):
     each_rmse = np.sqrt(mean_squared_error(y_true, y_preds))
     if verbose:
@@ -3901,7 +3904,7 @@ def print_regression_metrics(y_true, y_preds, verbose=0):
         if verbose:
             print('    WAPE = %0.0f%%, Bias = %0.0f%%' %(100*np.sum(np.abs(y_true-y_preds))/np.sum(y_true), 
                         100*np.sum(y_true-y_preds)/np.sum(y_true)))
-            print('    MAPE = %0.0f%%' %(100*mean_absolute_percentage_error(y_true, y_preds)))
+            print('    MAPE = %0.0f%%' %(100*MAPE(y_true, y_preds)))
     print('    R-Squared = %0.0f%%' %(100*r2_score(y_true, y_preds)))
     plot_regression(y_true, y_preds, chart='scatter')
     return each_rmse
@@ -3967,6 +3970,8 @@ def plot_regression(actuals, predicted, chart='scatter'):
     plt.legend()
     plt.title('Model: Predicted vs Actuals', fontsize=12)
     plt.show();
+############################################################################################
+#########   This is where SULOCLASSIFIER and SULOREGRESSOR END   ###########################
 ############################################################################################
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.utils import indexable
@@ -4130,7 +4135,8 @@ def xgboost_regressor( X_train, y_train, X_test,
     # Return predictions ###
     if log_transform:
         preds1 = np.power(10, preds1)
-
+    from xgboost import plot_importance
+    plot_importance(gbm)
     return preds1
 #################################################################################
 from scipy.stats import probplot,skew
@@ -4241,11 +4247,11 @@ def data_cleaning_suggestions(df):
         display(ax);
     else:
         print("Input must be a dataframe. Please check input and try again.")
-############################################################################################
-#########   This is where SULOCLASSIFIER and SULOREGRESSOR END   ###########################
+#############################################################################################
+
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '1.00'
+version_number =  '1.1'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
