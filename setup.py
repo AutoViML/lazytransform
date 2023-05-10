@@ -12,8 +12,8 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     license='Apache License 2.0',
-    url="https://github.com/AutoViML/pandas_dq",
-    py_modules = ["pandas_dq"],
+    url="https://github.com/AutoViML/lazytransform",
+    py_modules = ["lazytransform"],
     packages=setuptools.find_packages(exclude=("tests",)),
     install_requires=[
     "numpy~=1.20.3",
