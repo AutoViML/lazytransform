@@ -23,7 +23,6 @@ setuptools.setup(
     "lightgbm>=3.2.1",
     "imbalanced-learn>=0.8.0",
     "matplotlib~=3.4.2",
-    "imbalanced-ensemble~=0.2.0",
     ],
     include_package_data = True,
     classifiers=[
