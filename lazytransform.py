@@ -136,6 +136,9 @@ from sklearn.impute import SimpleImputer, MissingIndicator
 from sklearn.compose import ColumnTransformer
 from scipy.stats import uniform as sp_randFloat
 from scipy.stats import randint as sp_randInt
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+from itertools import cycle
+import matplotlib.pyplot as plt
 
 #########################################################
 class My_LabelEncoder(BaseEstimator, TransformerMixin):
@@ -3940,9 +3943,6 @@ def print_mape(y, y_hat):
     perc_err = (100*(np.where(y==0,0.001,y) - y_hat))/np.where(y==0,0.001,y)
     return np.mean(abs(perc_err))
     
-from sklearn.metrics import mean_absolute_error, mean_squared_error
-from itertools import cycle
-import matplotlib.pyplot as plt
 def plot_regression(actuals, predicted, chart='scatter'):
     """
     This function plots the actuals vs. predicted as a line plot.
