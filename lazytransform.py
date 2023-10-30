@@ -1082,6 +1082,8 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     elif encoder in non_one_hot_list or basic_encoder in non_one_hot_list:
         if verbose:
             print('%s encoder selected for transforming all categorical variables' %encoder)
+    elif basic_encoder in onehot_type_encoders or encoder in onehot_type_encoders:
+        pass
     else:
         print('%s encoder not found in list of encoders. Using auto instead' %encoder)
         encoders = 'auto'
@@ -1950,12 +1952,13 @@ class YTransformer(TransformerMixin):
         self.fit(y)
         if isinstance(y, pd.Series):
             y_trans = self.transformers[self.targets[0]].transform(y)
+            y_trans = pd.Series(y_trans, index=y.index, name=y.name)
         elif isinstance(y, pd.DataFrame):
             y_trans = copy.deepcopy(y)
             for each_target in self.targets:
                 y_trans[each_target] = self.transformers[each_target].transform(y[each_target])
         else:
-            print('Error: Cannot transform numpy arrays. Returning')
+            print('Error: y must be a pandas series or dataframe. Try again after transforming y.')
             return y
         return y_trans
     
@@ -4251,7 +4254,7 @@ def data_cleaning_suggestions(df):
 
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '1.1'
+version_number =  '1.3'
 print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
     lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
         transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
