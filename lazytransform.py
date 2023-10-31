@@ -4254,15 +4254,7 @@ def data_cleaning_suggestions(df):
 
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '1.3'
-print(f"""{module_type} LazyTransformer version:{version_number}. Call by using:
-    lazy = LazyTransformer(model=None, encoders='auto', scalers=None, date_to_string=False,
-        transform_target=False, imbalanced=False, save=False, combine_rare=False, verbose=0)
-    ### if you are not using a model in pipeline, you must use fit and transform ###
-        X_trainm, y_trainm = lazy.fit_transform(X_train, y_train)
-        X_testm = lazy.transform(X_test)
-    ### If using a model in pipeline, use fit and predict only ###
-        lazy.fit(X_train, y_train)
-        lazy.predict(X_test)
+version_number =  '1.5'
+print(f"""{module_type} LazyTransformer version:{version_number}. 
 """)
 #################################################################################
