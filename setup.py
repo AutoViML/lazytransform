@@ -18,13 +18,13 @@ setuptools.setup(
     install_requires=[
     "numpy~=1.20.3",
     "pandas~=1.2.4",
-    "scikit-learn~=0.24.2",
+    "scikit-learn>=0.24.2",
     "python-dateutil~=2.8.1",
     "lightgbm>=3.2.1",
     "imbalanced-learn>=0.8.0",
     "matplotlib~=3.4.2",
     "category-encoders>=2.6.2",
-    "tqdm~=4.61.1",
+    "tqdm>=4.61.1",
     ],
     include_package_data = True,
     classifiers=[
