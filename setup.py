@@ -25,7 +25,6 @@ setuptools.setup(
     "matplotlib>=3.4.2",
     "category-encoders>=2.6.2",
     "tqdm>=4.61.1",
-    "imbalanced-ensemble>=0.2.0",    
     ],
     include_package_data = True,
     classifiers=[
