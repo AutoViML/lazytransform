@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="lazytransform",
-    version="1.6",
+    version="1.7",
     author="Ram Seshadri",
     # author_email="author@example.com",
     description="Clean your data using a scikit-learn transformer in a single line of code",
@@ -25,6 +25,7 @@ setuptools.setup(
     "matplotlib>=3.4.2",
     "category-encoders>=2.6.2",
     "tqdm>=4.61.1",
+    "imbalanced-ensemble>=0.2.0",    
     ],
     include_package_data = True,
     classifiers=[
