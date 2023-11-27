@@ -1592,7 +1592,7 @@ class LazyTransformer(TransformerMixin):
                 combine_rare_flag=self.combine_rare, verbose=self.verbose)
             print('No model input given...')
             #### here we check if we should add a model to the pipeline 
-            print('X and y Transformer Pipeline created...')
+            print('Lazy Transformer Pipeline created...')
             if self.transform_target:
                 self.yformer.fit(y)
                 yt = self.yformer.transform(y)
@@ -4254,7 +4254,7 @@ def data_cleaning_suggestions(df):
 
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '1.5'
+version_number =  '1.6'
 print(f"""{module_type} LazyTransformer version:{version_number}. 
 """)
 #################################################################################
