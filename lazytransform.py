@@ -83,7 +83,6 @@ from category_encoders.glmm import GLMMEncoder
 from sklearn.preprocessing import LabelEncoder
 from category_encoders.wrapper import PolynomialWrapper
 from category_encoders import OneHotEncoder
-from imblearn.over_sampling import SMOTE, BorderlineSMOTE, SMOTENC
 from sklearn.pipeline import make_pipeline, Pipeline
 #from sklearn.preprocessing import OneHotEncoder
 from tqdm import tqdm
@@ -117,9 +116,6 @@ from sklearn.ensemble import VotingRegressor, VotingClassifier
 import copy
 from sklearn.base import BaseEstimator, TransformerMixin, RegressorMixin, clone
 from sklearn.base import ClassifierMixin, RegressorMixin
-from imblearn.over_sampling import SMOTENC, ADASYN
-from imblearn.over_sampling import SMOTE, SVMSMOTE
-from imblearn.combine import SMOTETomek 
 import lightgbm
 from lightgbm import LGBMClassifier, LGBMRegressor
 from xgboost import XGBRegressor, XGBClassifier
@@ -1608,7 +1604,12 @@ class LazyTransformer(TransformerMixin):
             self.fitted = True
         ### print imbalanced ###
         if self.imbalanced:
-            print('### Alert! Do not use SMOTE if this is not an imbalanced classification problem #######')
+            print('### Warning! Do not set imbalanced_flag if this is not an imbalanced classification problem! #######')
+            try:
+                from imblearn.over_sampling import SMOTE, BorderlineSMOTE, SMOTENC
+            except:
+                print('This function needs Imbalanced-Learn library. Please pip install it first and try again!')
+                return
             if isinstance(X, pd.DataFrame):
                 var_classes = classify_vars_pandas(X)
                 cat_vars = var_classes['categorical_vars']
@@ -1672,6 +1673,11 @@ class LazyTransformer(TransformerMixin):
             if self.imbalanced_first_done and self.imbalanced:
                 pass
             elif not self.imbalanced_first_done and self.imbalanced:
+                try:
+                    from imblearn.over_sampling import SMOTE, BorderlineSMOTE, SMOTENC
+                except:
+                    print('This function needs Imbalanced-Learn library. Please pip install it first and try again!')
+                    return
                 sm = self.smotex
                 X_enc, y_enc = sm.fit_resample(X_enc, y_enc)
                 self.imbalanced_first_done = True
@@ -1705,7 +1711,12 @@ class LazyTransformer(TransformerMixin):
         if self.imbalanced_first_done and self.imbalanced:
             pass
         elif not self.imbalanced_first_done and self.imbalanced:
-            print('### Alert! Do not use SMOTE if this is not an imbalanced classification problem #######')
+            print('### Warning! Do not use imbalanced_flag if this is not an imbalanced classification problem! #######')
+            try:
+                from imblearn.over_sampling import SMOTE, BorderlineSMOTE, SMOTENC
+            except:
+                print('This function needs Imbalanced-Learn library. Please pip install it first and try again!')
+                return
             sm = self.smotex
             if self.verbose:
                 print('Imbalanced flag set. Using SMOTE to transform X and y...')
@@ -3671,31 +3682,7 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
 
                 est_list = num_iterations*[self.base_estimator]
                 #print('    base estimator = %s' %self.base_estimator)
-            
-            ### SMOTE processing #####
-            if i == 0:
-                if smote:
-                    print('Performing SMOTE...')
-                    if self.verbose:
-                        print('    x_train shape before SMOTE = %s' %(x_train.shape,))
-                    
-            if smote:
-                ### It does not appear that class weights work well in SMOTE - hence avoid ###                
-                try:
-                    sm = ADASYN(n_neighbors=5, random_state=seed, )
-                                #sampling_strategy=class_weighted_rows)
-                    
-                    x_train, y_train = sm.fit_resample(x_train, y_train)
-                    if i == 0:
-                        print('    x_train shape after SMOTE = %s' %(x_train.shape,))
-                except:
-                    sm = SMOTETomek(random_state=42,)
-                    #sm = ADASYN(n_neighbors=2, random_state=seed, )
-                                #sampling_strategy=class_weighted_rows)
-                    x_train, y_train = sm.fit_resample(x_train, y_train)                    
-                    if i == 0 and smote:
-                        print('    x_train shape after SMOTE = %s' %(x_train.shape,))
-            
+                        
             # Initialize model with your supervised algorithm of choice
             model = est_list[i]
             
@@ -4254,7 +4241,7 @@ def data_cleaning_suggestions(df):
 
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '1.7'
-print(f"""{module_type} LazyTransformer version:{version_number}. 
+version_number =  '1.8'
+print(f"""{module_type} LazyTransformer v{version_number}. 
 """)
 #################################################################################
