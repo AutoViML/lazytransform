@@ -789,9 +789,9 @@ def analyze_problem_type(y_train, target, verbose=0) :
     ########### print this for the start of next step ###########
     if verbose:
         if multi_label:
-            print('''#### %s %s problem ####''' %('Multi_Label', model_class))
+            print('''    %s %s problem ''' %('Multi_Label', model_class))
         else:
-            print('''#### %s %s problem ####''' %('Single_Label', model_class))
+            print('''    %s %s problem ''' %('Single_Label', model_class))
     return model_class, multi_label
 ####################################################################################################
 import copy
@@ -923,6 +923,7 @@ def return_default():
     missing_value = "missing_"+str(random.randint(1,1000))
     return missing_value
 ##################################################################################
+import pdb
 def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='', 
             date_to_string='', save_flag=False, combine_rare_flag=False, verbose=0):
     """
@@ -2455,7 +2456,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                     # Use best classification metric to measure performance of model
                     if self.imbalanced:
                         ### Use special priting program here ##
-                        score = print_sulo_accuracy(y_test, preds, y_probas="", verbose=self.verbose)
+                        score = print_classification_metrics(y_test, preds, y_probas="", verbose=self.verbose)
                         if self.verbose:
                             print("    Fold %s: out-of-fold balanced_accuracy: %0.1f%%" %(i+1, 100*score))
                     else:
@@ -2697,7 +2698,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
 
             if self.imbalanced:
                 ### Use Regression predictions and convert them into classes here ##
-                score = print_sulo_accuracy(y_test, preds, y_probas="", verbose=self.verbose)
+                score = print_classification_metrics(y_test, preds, y_probas="", verbose=self.verbose)
                 if self.verbose:
                         print("    Fold %s: out-of-fold balanced accuracy: %0.1f%%" %(i+1, 100*score))
             else:
@@ -3071,32 +3072,34 @@ def print_flatten_dict(dd, separator='_', prefix=''):
              for k, v in print_flatten_dict(vv, separator, kk).items()
              } if isinstance(dd, dict) else { prefix : dd }
 
+from sklearn.metrics import balanced_accuracy_score, classification_report
 def print_accuracy(target, y_test, y_preds, verbose=0):
     bal_scores = []
-    
-    from sklearn.metrics import balanced_accuracy_score, classification_report
-    if isinstance(target, str): 
-        bal_score = balanced_accuracy_score(y_test,y_preds)
-        bal_scores.append(bal_score)
-        if verbose:
-            print('Bal accu %0.0f%%' %(100*bal_score))
-            print(classification_report(y_test,y_preds))
-    elif len(target) <= 1:
-        bal_score = balanced_accuracy_score(y_test,y_preds)
-        bal_scores.append(bal_score)
-        if verbose:
-            print('Bal accu %0.0f%%' %(100*bal_score))
-            print(classification_report(y_test,y_preds))
-    else:
-        for each_i, target_name in enumerate(target):
-            bal_score = balanced_accuracy_score(y_test.values[:,each_i],y_preds[:,each_i])
+    try:    
+        if isinstance(target, str): 
+            bal_score = balanced_accuracy_score(y_test,y_preds)
             bal_scores.append(bal_score)
             if verbose:
-                if each_i == 0:
-                    print('For %s:' %target_name)
-                print('    Bal accu %0.0f%%' %(100*bal_score))
-                print(classification_report(y_test.values[:,each_i],y_preds[:,each_i]))
-    return np.mean(bal_scores)
+                print('Bal accu %0.0f%%' %(100*bal_score))
+                print(classification_report(y_test,y_preds))
+        elif len(target) <= 1:
+            bal_score = balanced_accuracy_score(y_test,y_preds)
+            bal_scores.append(bal_score)
+            if verbose:
+                print('Bal accu %0.0f%%' %(100*bal_score))
+                print(classification_report(y_test,y_preds))
+        else:
+            for each_i, target_name in enumerate(target):
+                bal_score = balanced_accuracy_score(y_test.values[:,each_i],y_preds[:,each_i])
+                bal_scores.append(bal_score)
+                if verbose:
+                    if each_i == 0:
+                        print('For %s:' %target_name)
+                    print('    Bal accu %0.0f%%' %(100*bal_score))
+                    print(classification_report(y_test.values[:,each_i],y_preds[:,each_i]))
+        return np.mean(bal_scores)
+    except Exception as e:
+        print('Error due to %s. Please check your inputs and try again' %e)
 ##########################################################################################
 from collections import defaultdict
 def return_predict_proba(y_probas):
@@ -3142,83 +3145,87 @@ from sklearn.metrics import roc_auc_score
 import copy
 from sklearn.metrics import balanced_accuracy_score, classification_report
 import pdb
-def print_sulo_accuracy(y_test, y_preds, y_probas='', verbose=0):
-    bal_scores = []
-    ####### Once you have detected what problem it is, now print its scores #####
-    if y_test.ndim <= 1: 
-        ### This is a single label problem # we need to test for multiclass ##
-        bal_score = balanced_accuracy_score(y_test,y_preds)
-        print('Bal accu %0.0f%%' %(100*bal_score))
-        if not isinstance(y_probas, str):
-            if y_probas.ndim <= 1:
-                print('ROC AUC = %0.2f' %roc_auc_score(y_test, y_probas[:,1]))
-            else:
-                if y_probas.shape[1] == 2:
-                    print('ROC AUC = %0.2f' %roc_auc_score(y_test, y_probas[:,1]))
-                else:
-                    print('Multi-class ROC AUC = %0.2f' %roc_auc_score(y_test, y_probas, multi_class="ovr"))
-        bal_scores.append(bal_score)
-        if verbose:
-            print(classification_report(y_test,y_preds))
-    elif y_test.ndim >= 2:
-        if y_test.shape[1] == 1:
+def print_classification_metrics(y_test, y_preds, y_probas='', verbose=0):
+    try:
+        bal_scores = []
+        ####### Once you have detected what problem it is, now print its scores #####
+        if y_test.ndim <= 1: 
+            ### This is a single label problem # we need to test for multiclass ##
             bal_score = balanced_accuracy_score(y_test,y_preds)
-            bal_scores.append(bal_score)
             print('Bal accu %0.0f%%' %(100*bal_score))
             if not isinstance(y_probas, str):
-                if y_probas.shape[1] > 2:
-                    print('ROC AUC = %0.2f' %roc_auc_score(y_test, y_probas, multi_class="ovr"))
-                else:
+                if y_probas.ndim <= 1:
                     print('ROC AUC = %0.2f' %roc_auc_score(y_test, y_probas[:,1]))
+                else:
+                    if y_probas.shape[1] == 2:
+                        print('ROC AUC = %0.2f' %roc_auc_score(y_test, y_probas[:,1]))
+                    else:
+                        print('Multi-class ROC AUC = %0.2f' %roc_auc_score(y_test, y_probas, multi_class="ovr"))
+            bal_scores.append(bal_score)
             if verbose:
                 print(classification_report(y_test,y_preds))
-        else:
-            if isinstance(y_probas, str):
-                ### This is for multi-label problems without probas ####
-                for each_i in range(y_test.shape[1]):
-                    bal_score = balanced_accuracy_score(y_test.values[:,each_i],y_preds[:,each_i])
-                    bal_scores.append(bal_score)
-                    print('    Bal accu %0.0f%%' %(100*bal_score))
-                    if verbose:
-                        print(classification_report(y_test.values[:,each_i],y_preds[:,each_i]))
-            else:
-                ##### This is only for multi_label_multi_class problems
-                num_targets = y_test.shape[1]
-                for each_i in range(num_targets):
-                    print('    Bal accu %0.0f%%' %(100*balanced_accuracy_score(y_test.values[:,each_i],y_preds[:,each_i])))
-                    if len(np.unique(y_test.values[:,each_i])) > 2:
-                        ### This nan problem happens due to Label Propagation but can be fixed as follows ##
-                        mat = y_probas[each_i]
-                        if np.any(np.isnan(mat)):
-                            mat = pd.DataFrame(mat).fillna(method='ffill').values
-                            bal_score = roc_auc_score(y_test.values[:,each_i],mat,multi_class="ovr")
-                        else:
-                            bal_score = roc_auc_score(y_test.values[:,each_i],mat,multi_class="ovr")
+        elif y_test.ndim >= 2:
+            if y_test.shape[1] == 1:
+                bal_score = balanced_accuracy_score(y_test,y_preds)
+                bal_scores.append(bal_score)
+                print('Bal accu %0.0f%%' %(100*bal_score))
+                if not isinstance(y_probas, str):
+                    if y_probas.shape[1] > 2:
+                        print('ROC AUC = %0.2f' %roc_auc_score(y_test, y_probas, multi_class="ovr"))
                     else:
-                        if isinstance(y_probas, dict):
-                            if y_probas[each_i].ndim <= 1:
-                                ## This is caused by Label Propagation hence you must probas like this ##
-                                mat = y_probas[each_i]
-                                if np.any(np.isnan(mat)):
-                                    mat = pd.DataFrame(mat).fillna(method='ffill').values
-                                bal_score = roc_auc_score(y_test.values[:,each_i],mat)
+                        print('ROC AUC = %0.2f' %roc_auc_score(y_test, y_probas[:,1]))
+                if verbose:
+                    print(classification_report(y_test,y_preds))
+            else:
+                if isinstance(y_probas, str):
+                    ### This is for multi-label problems without probas ####
+                    for each_i in range(y_test.shape[1]):
+                        bal_score = balanced_accuracy_score(y_test.values[:,each_i],y_preds[:,each_i])
+                        bal_scores.append(bal_score)
+                        print('    Bal accu %0.0f%%' %(100*bal_score))
+                        if verbose:
+                            print(classification_report(y_test.values[:,each_i],y_preds[:,each_i]))
+                else:
+                    ##### This is only for multi_label_multi_class problems
+                    num_targets = y_test.shape[1]
+                    for each_i in range(num_targets):
+                        print('    Bal accu %0.0f%%' %(100*balanced_accuracy_score(y_test.values[:,each_i],y_preds[:,each_i])))
+                        if len(np.unique(y_test.values[:,each_i])) > 2:
+                            ### This nan problem happens due to Label Propagation but can be fixed as follows ##
+                            mat = y_probas[each_i]
+                            if np.any(np.isnan(mat)):
+                                mat = pd.DataFrame(mat).fillna(method='ffill').values
+                                bal_score = roc_auc_score(y_test.values[:,each_i],mat,multi_class="ovr")
                             else:
-                                bal_score = roc_auc_score(y_test.values[:,each_i],y_probas[each_i][:,1])
+                                bal_score = roc_auc_score(y_test.values[:,each_i],mat,multi_class="ovr")
                         else:
-                            if y_probas.shape[1] == num_targets:
-                                ### This means Label Propagation was used which creates probas like this ##
-                                bal_score = roc_auc_score(y_test.values[:,each_i],y_probas[:,each_i])
+                            if isinstance(y_probas, dict):
+                                if y_probas[each_i].ndim <= 1:
+                                    ## This is caused by Label Propagation hence you must probas like this ##
+                                    mat = y_probas[each_i]
+                                    if np.any(np.isnan(mat)):
+                                        mat = pd.DataFrame(mat).fillna(method='ffill').values
+                                    bal_score = roc_auc_score(y_test.values[:,each_i],mat)
+                                else:
+                                    bal_score = roc_auc_score(y_test.values[:,each_i],y_probas[each_i][:,1])
                             else:
-                                ### This means regular sklearn classifiers which predict multi dim probas #
-                                bal_score = roc_auc_score(y_test.values[:,each_i],y_probas[each_i])
-                    print('Target number %s: ROC AUC score %0.0f%%' %(each_i+1,100*bal_score))
-                    bal_scores.append(bal_score)
-                    if verbose:
-                        print(classification_report(y_test.values[:,each_i],y_preds[:,each_i]))
-    final_score = np.mean(bal_scores)
-    if verbose:
-        print("final average balanced accuracy score = %0.2f" %final_score)
-    return final_score
+                                if y_probas.shape[1] == num_targets:
+                                    ### This means Label Propagation was used which creates probas like this ##
+                                    bal_score = roc_auc_score(y_test.values[:,each_i],y_probas[:,each_i])
+                                else:
+                                    ### This means regular sklearn classifiers which predict multi dim probas #
+                                    bal_score = roc_auc_score(y_test.values[:,each_i],y_probas[each_i])
+                        print('Target number %s: ROC AUC score %0.0f%%' %(each_i+1,100*bal_score))
+                        bal_scores.append(bal_score)
+                        if verbose:
+                            print(classification_report(y_test.values[:,each_i],y_preds[:,each_i]))
+        final_score = np.mean(bal_scores)
+        if verbose:
+            print("final average balanced accuracy score = %0.2f" %final_score)
+        return final_score
+    except Exception as e:
+        print('Could not print classification metrics due to %s.' %e)
+        return 0.0
 ##############################################################################
 import os
 def check_if_GPU_exists():
@@ -3883,24 +3890,28 @@ def MAPE(y_true, y_pred):
   return np.mean(np.abs((y_true - y_pred) / np.maximum(np.ones(len(y_true)), np.abs(y_true))))*100
 
 def print_regression_metrics(y_true, y_preds, verbose=0):
-    each_rmse = np.sqrt(mean_squared_error(y_true, y_preds))
-    if verbose:
-        print('    RMSE = %0.3f' %each_rmse)
-        print('    Norm RMSE = %0.0f%%' %(100*np.sqrt(mean_squared_error(y_true, y_preds))/np.std(y_true)))
-        print('    MAE = %0.3f'  %mean_absolute_error(y_true, y_preds))
-    if len(y_true[(y_true==0)]) > 0:
+    try:
+        each_rmse = np.sqrt(mean_squared_error(y_true, y_preds))
         if verbose:
-            print('    WAPE = %0.0f%%, Bias = %0.0f%%' %(100*np.sum(np.abs(y_true-y_preds))/np.sum(y_true), 
-                        100*np.sum(y_true-y_preds)/np.sum(y_true)))
-            print('    No MAPE available since zeroes in actuals')
-    else:
-        if verbose:
-            print('    WAPE = %0.0f%%, Bias = %0.0f%%' %(100*np.sum(np.abs(y_true-y_preds))/np.sum(y_true), 
-                        100*np.sum(y_true-y_preds)/np.sum(y_true)))
-            print('    MAPE = %0.0f%%' %(100*MAPE(y_true, y_preds)))
-    print('    R-Squared = %0.0f%%' %(100*r2_score(y_true, y_preds)))
-    plot_regression(y_true, y_preds, chart='scatter')
-    return each_rmse
+            print('    RMSE = %0.3f' %each_rmse)
+            print('    Norm RMSE = %0.0f%%' %(100*np.sqrt(mean_squared_error(y_true, y_preds))/np.std(y_true)))
+            print('    MAE = %0.3f'  %mean_absolute_error(y_true, y_preds))
+        if len(y_true[(y_true==0)]) > 0:
+            if verbose:
+                print('    WAPE = %0.0f%%, Bias = %0.1f%%' %(100*np.sum(np.abs(y_true-y_preds))/np.sum(y_true), 
+                            100*np.sum(y_true-y_preds)/np.sum(y_true)))
+                print('    No MAPE available since zeroes in actuals')
+        else:
+            if verbose:
+                print('    WAPE = %0.0f%%, Bias = %0.1f%%' %(100*np.sum(np.abs(y_true-y_preds))/np.sum(y_true), 
+                            100*np.sum(y_true-y_preds)/np.sum(y_true)))
+                print('    MAPE = %0.0f%%' %(100*MAPE(y_true, y_preds)))
+        print('    R-Squared = %0.0f%%' %(100*r2_score(y_true, y_preds)))
+        plot_regression(y_true, y_preds, chart='scatter')
+        return each_rmse
+    except Exception as e:
+        print('Could not print regression metrics due to %s.' %e)
+        return np.inf
 ################################################################################
 def print_static_rmse(actual, predicted, start_from=0,verbose=0):
     """
@@ -4241,7 +4252,7 @@ def data_cleaning_suggestions(df):
 
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '1.8'
-print(f"""{module_type} LazyTransformer v{version_number}. 
+version_number =  '1.9'
+print(f"""{module_type} lazytransform v{version_number}. 
 """)
 #################################################################################
