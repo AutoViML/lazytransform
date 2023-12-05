@@ -3145,7 +3145,64 @@ from sklearn.metrics import roc_auc_score
 import copy
 from sklearn.metrics import balanced_accuracy_score, classification_report
 import pdb
+def print_sulo_accuracy(y_test, y_preds, y_probas='', verbose=0):
+    """
+    A wrapper function for print_classification_metrics, specifically focused on classification metrics
+
+    Note:
+    This function is a direct call to print_classification_metrics with the same parameters. It serves as 
+    a bridge function since some older versions of lazytransform use this.
+
+    Examples:
+    # For single-label binary classification
+    print_sulo_accuracy(y_test, y_preds)
+
+    # For multi-label classification with verbose output
+    print_sulo_accuracy(y_test, y_preds, verbose=1)
+
+    # For single-label classification with predicted probabilities
+    print_sulo_accuracy(y_test, y_preds, y_probas)
+    """
+    return print_classification_metrics(y_test, y_preds, y_probas, verbose)
+
 def print_classification_metrics(y_test, y_preds, y_probas='', verbose=0):
+    """
+    Calculate and print classification metrics for single-label, multi-label, and multi-class problems.
+
+    This function computes and displays various metrics such as balanced accuracy score and ROC AUC score 
+    based on the given test labels, predicted labels, and predicted probabilities. It handles different 
+    scenarios including single-label, multi-label, multi-class, and their combinations. Additionally, it 
+    provides detailed classification reports if verbose output is requested.
+
+    Parameters:
+    y_test (array-like): True labels. Should be 1D for single-label and 2D for multi-label problems.
+    y_preds (array-like): Predicted labels. Should match the dimensionality of y_test.
+    y_probas (array-like, optional): Predicted probabilities. Default is an empty string, indicating 
+                                     no probabilities are provided. Should be 2D with probabilities for 
+                                     each class.
+    verbose (int, optional): Verbose level. If set to 1, it prints out detailed classification reports. 
+                             Default is 0, which prints only summary metrics.
+
+    Returns:
+    float: Final average balanced accuracy score across all labels/classes. Returns 0.0 if an exception occurs.
+
+    Raises:
+    Exception: If an error occurs during the calculation or printing of metrics.
+
+    Note:
+    The function is designed to handle various edge cases and different formats of predicted probabilities, 
+    such as those produced by different classifiers or methods like Label Propagation.
+
+    Examples:
+    # For single-label binary classification
+    print_classification_metrics(y_test, y_preds)
+
+    # For multi-label classification with verbose output
+    print_classification_metrics(y_test, y_preds, verbose=1)
+
+    # For single-label classification with predicted probabilities
+    print_classification_metrics(y_test, y_preds, y_probas)
+    """    
     try:
         bal_scores = []
         ####### Once you have detected what problem it is, now print its scores #####
