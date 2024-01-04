@@ -823,6 +823,12 @@ def _create_ts_features(df, verbose=0):
     try:
         df[tscol+'_dayofweek'] = df[tscol].dt.dayofweek.fillna(0).astype(int)
         dt_adds.append(tscol+'_dayofweek')
+        # day of week Sine and Cos functions
+        df[tscol+'_dayofweek_sin'] = df[tscol+'_dayofweek'].apply( lambda x: np.sin( x * ( 2. * np.pi/7 ) ) )
+        df[tscol+'_dayofweek_cos'] = df[tscol+'_dayofweek'].apply( lambda x: np.cos( x * ( 2. * np.pi/7 ) ) )
+        dt_adds.append(tscol+'_dayofweek_sin')
+        dt_adds.append(tscol+'_dayofweek_cos')
+        ######  Create some Feature Crosses with day of week ###################        
         if tscol+'_hour' in dt_adds:
             DAYS = dict(zip(range(7),['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']))
             df[tscol+'_dayofweek'] = df[tscol+'_dayofweek'].map(DAYS)
@@ -831,6 +837,12 @@ def _create_ts_features(df, verbose=0):
         df[tscol+'_quarter'] = df[tscol].dt.quarter.fillna(0).astype(int)
         dt_adds.append(tscol+'_quarter')
         df[tscol+'_month'] = df[tscol].dt.month.fillna(0).astype(int)
+        ####  Add some Sine and Cos functions for Month #################
+        df[tscol+'_month_sin'] = df[tscol+'_month'].apply( lambda x: np.sin( x * ( 2. * np.pi/12 )) )
+        df[tscol+'_month_cos'] = df[tscol+'_month'].apply( lambda x: np.cos( x * ( 2. * np.pi/12 )) )
+        dt_adds.append(tscol+'_month_sin')
+        dt_adds.append(tscol+'_month_cos')
+        ##############   Convert Months from numeric to object strings ############
         MONTHS = dict(zip(range(1,13),['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul',
                                     'Aug', 'Sep', 'Oct', 'Nov', 'Dec']))
         df[tscol+'_month'] = df[tscol+'_month'].map(MONTHS)
@@ -884,6 +896,12 @@ def _create_ts_features(df, verbose=0):
         dt_adds.append(tscol+'_dayofyear')
         df[tscol+'_dayofmonth'] = df[tscol].dt.day.fillna(0).astype(int)
         dt_adds.append(tscol+'_dayofmonth')
+        ##### Add Sine and cos functions for Day of Month ##############
+        df[tscol+'_dayofmonth_sin'] = df[tscol+'_dayofmonth'].apply( lambda x: np.sin( x * ( 2. * np.pi/30 ) ) )
+        df[tscol+'_dayofmonth_cos'] = df[tscol+'_dayofmonth'].apply( lambda x: np.cos( x * ( 2. * np.pi/30 ) ) )
+        dt_adds.append(tscol+'_dayofmonth_sin')
+        dt_adds.append(tscol+'_dayofmonth_cos')
+        ######### Continue with other functions ##########        
         df[tscol+'_weekofyear'] = df[tscol].dt.weekofyear.fillna(0).astype(int)
         dt_adds.append(tscol+'_weekofyear')
         weekends = (df[tscol+'_dayofweek'] == 'Sat') | (df[tscol+'_dayofweek'] == 'Sun')
@@ -1147,8 +1165,10 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
             nuniques.append(int(max(2, 3*np.log2(X_train[each_nlp].nunique()))))
         #### find the min and set the TFIDF for that smallest NLP variable ########            
         top_n = np.min(nuniques)
-        top_n = int(min(30, top_n*0.1))
-        svd_n_iter = int(min(10, top_n*0.1))
+        top_n = int(min(100, top_n*0.3))
+        svd_n_iter = int(min(10, top_n*0.5))
+        if svd_n_iter < 3:
+            svd_n_iter = 3
         if verbose:
             print('    %d components chosen for TruncatedSVD(n_iter=%d) after TFIDF' %(top_n, svd_n_iter))
         #############   This is where we set defaults for NLP transformers ##########
@@ -1703,6 +1723,7 @@ class LazyTransformer(TransformerMixin):
         self.fit(X,y)
         X_trans =  self.xformer.transform(X)
         X_trans.index = self.X_index
+        
         ### Here you can straight away fit and transform y ###
         if self.transform_target:
             y_trans = self.yformer.fit_transform(y)
@@ -4309,7 +4330,7 @@ def data_cleaning_suggestions(df):
 
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '1.9'
+version_number =  '1.11'
 print(f"""{module_type} lazytransform v{version_number}. 
 """)
 #################################################################################
