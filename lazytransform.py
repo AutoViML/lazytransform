@@ -3514,7 +3514,7 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
                             if self.integers_only:
                                 if (X.dtypes==float).all() and len(self.features) <= features_limit:
                                     print('    Selecting Ridge as base_estimator. Feel free to send in your own estimator.')
-                                    self.base_estimator = Ridge(normalize=False)
+                                    self.base_estimator = Ridge()
                                     self.model_name = 'other'
                                 else:
                                     if self.verbose:
@@ -3673,7 +3673,7 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
                         if (X.dtypes==float).all():
                             if self.verbose:
                                 print('    Selecting Ridge as base_estimator. Feel free to send in your own estimator.')
-                            self.base_estimator = Ridge(normalize=False)
+                            self.base_estimator = Ridge()
                             self.model_name = 'other'
                         else:
                             if self.verbose:
@@ -3694,7 +3694,7 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
                         if (X.dtypes==float).all():
                             if self.verbose:
                                 print('    Selecting Ridge as base_estimator. Feel free to send in your own estimator.')
-                            self.base_estimator = Ridge(normalize=False)
+                            self.base_estimator = Ridge()
                             self.model_name = 'other'
                         else:
                             if len(self.features) <= features_limit:
@@ -3985,7 +3985,8 @@ def print_regression_metrics(y_true, y_preds, verbose=0):
                             100*np.sum(y_true-y_preds)/np.sum(y_true)))
                 print('    MAPE = %0.0f%%' %(100*MAPE(y_true, y_preds)))
         print('    R-Squared = %0.0f%%' %(100*r2_score(y_true, y_preds)))
-        plot_regression(y_true, y_preds, chart='scatter')
+        if not verbose:
+            plot_regression(y_true, y_preds, chart='scatter')
         return each_rmse
     except Exception as e:
         print('Could not print regression metrics due to %s.' %e)
@@ -4330,7 +4331,7 @@ def data_cleaning_suggestions(df):
 
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '1.11'
+version_number =  '1.12'
 print(f"""{module_type} lazytransform v{version_number}. 
 """)
 #################################################################################
