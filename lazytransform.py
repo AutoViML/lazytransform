@@ -722,7 +722,7 @@ def convert_ce_to_pipe(Xt):
     ### This converts a series to a dataframe to make category encoders work in sklearn pipelines ###
     if str(Xt.dtype) == 'category':
         Xtx = Xt.cat.rename_categories(str).values.tolist()
-        return pd.DataFrame(Xtx, columns=[Xt.name])
+        return pd.DataFrame(Xtx, columns=[Xt.name], index=Xt.index)
     else:
         Xtx = Xt.fillna('missing')
         return pd.DataFrame(Xtx)
@@ -997,7 +997,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     #### Send target variable as it is so that y_train is analyzed properly ###
     modeltype, multi_label = analyze_problem_type(y_train, target, verbose=1)
     print('Shape of dataset: %s. Now we classify variables into different types...' %(X_train.shape,))
-    var_dict = classify_vars_pandas(df[cols],verbose)
+    var_dict = classify_vars_pandas(X_train,verbose)
     #### Once vars are classified bucket them into major types ###
     catvars = var_dict['categorical_vars'] ### these are low cardinality cat variables 
     discretevars = var_dict['discrete_string_vars'] ### these are high cardinality cat variables 
@@ -1228,7 +1228,10 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
                 onehot_dict[each_catcol] = unique_cols
             else:
                 if basic_encoder == 'onehot':
-                    X_train[[each_catcol]] = X_train[[each_catcol]].fillna('MISSINGVALUE',axis=1)
+                    if str(X_train[each_catcol].dtype) == 'category':
+                        print('    Alert: Make sure there are no missing values in %s category variable' %each_catcol)
+                    else:
+                        X_train[[each_catcol]] = X_train[[each_catcol]].fillna('MISSINGVALUE',axis=1)
                     unique_cols = X_train[each_catcol].unique().tolist()
                     #unique_cols = np.where(unique_cols==np.nan, 'missing', unique_cols)
                     #unique_cols = np.where(unique_cols == None, 'missing', unique_cols)
@@ -1331,6 +1334,7 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
     else:
         ### default is no scaler ##
         scaler_pipe = copy.deepcopy(ct)
+    
     ### The first columns should be whatever is in the Transformer_Pipeline list of columns
     ### Hence they will be 'Sex', "Embarked", "Age", "Fare". Then only other columns that are passed through.
     ### So after the above 4, you will get remainder cols unchanged: "Parch","Name"
@@ -4331,7 +4335,7 @@ def data_cleaning_suggestions(df):
 
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '1.12'
+version_number =  '1.13'
 print(f"""{module_type} lazytransform v{version_number}. 
 """)
 #################################################################################

@@ -22,6 +22,7 @@ setuptools.setup(
     "python-dateutil>=2.8.1",
     "lightgbm>=3.2.1",
     "matplotlib>=3.4.2",
+    "scipy<1.11.0",
     "category-encoders>=2.6.2",
     "tqdm>=4.61.1",
     ],
