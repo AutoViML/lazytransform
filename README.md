@@ -9,8 +9,8 @@ Automatically transform all categorical, date-time, NLP variables in your data s
 !pip install lazytransform --ignore-installed --no-cache --no-deps
 ```
 </li><br>
-<li><b>lazytransform as of version 0.91 has two Super Learning Optimized (SULO) Ensembles named "SuloClassifier" and "SuloRegressor"</b>. The estimators are "optimized" in the sense that you can use them for all kinds of multi-label multi-class and Imbalanced data set problems without needing to do hyper-parameter tuning with GridSearchCV. They are built using basic scikit-learn estimators and are self-optimizing since they perform hyper-param tuning for each kind of problem and use weights for each classifier or regressor, different random seeds, etc. to make them highly performant. On top of it, they are fully scikit-learn compatible with the same "fit and predict" syntax. </li>
-Take a look at the benchmarking results notebook here for SuloClassifier: 
+<li><b>lazytransform as of version 0.91 has two Super Learning Optimized (SULO) Ensembles named "SuloClassifier" and "SuloRegressor"</b>. The estimators are "super-optimized" in the sense that they perform automatic GridSearchCV so you can use them for all kinds of multi-label multi-class and Imbalanced data set problems with just default parameters to get great results in Kaggle competitions. </li>
+Take a look at the amazing benchmarking results notebook here for SuloClassifier: 
 
 ![Notebook](https://github.com/AutoViML/lazytransform/tree/main/notebooks/SuloClassifier_Benchmarking_Results.ipynb)
 
@@ -28,6 +28,7 @@ We ran a similar benchmarking result in SuloRegressor against XGBoost and LightG
 <li><a href="#uses">How to use lazytransform</a></li>
 <li><a href="#install">How to install lazytransform</a></li>
 <li><a href="#usage">Usage</a></li>
+<li><a href="#tips">Tips</a></li>
 <li><a href="#api">API</a></li>
 <li><a href="#maintainers">Maintainers</a></li>
 <li><a href="#contributing">Contributing</a></li>
@@ -138,6 +139,19 @@ lazy = LazyTransformer(model=RandomForestClassifier(), encoders='auto', scalers=
 lazy.fit(X_train, y_train)
 lazy.predict(X_test)
 ```
+
+
+## Tips
+
+<b>Tips for using SuloClassifier and SuloRegressor for High Performance:</b>
+1. First try it with base_estimator as None and all other params as either None or False
+2. Compare it against a competitor model such as XGBoost or RandomForest and see whether it beats them.
+3. If not, then set weights = True for Sulo models and then imbalanced=True and see whether that works.
+4. If a competitor is still beating Sulo, then use that model as base_estimator while leaving all other params above untouched.
+5. Finally change the n_estimators from default=None to 5.
+6. Finally increase n_estimators to 7 and then 10 and see. By now, Sulo should be beating all other models.
+7. The more you increase the number of estimators, the more performance boost you will get until at some point it drops off. Keep increasing until then.
+
 
 ## API
 

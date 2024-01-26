@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="lazytransform",
-    version="1.13",
+    version="1.14",
     author="Ram Seshadri",
     # author_email="author@example.com",
     description="Clean your data using a scikit-learn transformer in a single line of code",

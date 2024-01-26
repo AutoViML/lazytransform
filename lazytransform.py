@@ -2401,15 +2401,17 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                         self.base_estimator = ExtraTreesClassifier(random_state=random_seed)
                                         self.model_name = 'rf'
                                     else:
-                                        self.base_estimator = LGBMRegressor(n_jobs=-1, device=device, random_state=random_seed)                                    
+                                        self.base_estimator = LGBMClassifier(n_jobs=-1, device=device, 
+                                                                random_state=random_seed)                                    
                                 else:
                                     if (X.dtypes==float).all() and len(self.features) <= features_limit:
-                                        print('    Selecting Label Propagation since it works great for multiclass problems...')
-                                        print('        however it will skew probabilities a little so be aware of this')
+                                        print('    Selecting Label Propagation for multiclass problems...')
+                                        print('        however it will skew probabilities so beware!')
                                         self.base_estimator =  LabelPropagation()
                                         self.model_name = 'lp'
                                     else:
-                                        self.base_estimator = LGBMClassifier(n_jobs=-1, device=device, random_state=random_seed)
+                                        self.base_estimator = LGBMClassifier(n_jobs=-1, device=device, 
+                                                        random_state=random_seed)
                     else:
                         self.model_name == 'other'
                     ### Now print LGBM if appropriate #######
@@ -2511,7 +2513,6 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
         ########################################################
         #####  This is for Single Label Classification problems 
         ########################################################
-        
         if isinstance(y, pd.Series):
             targets = y.name
             if targets is None:
@@ -2540,8 +2541,8 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                 from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                             except:
-                                print('pip install imbalanced_ensemble and re-run this again.')
-                                return self
+                                print('imbalanced_ensemble not installed hence trying a different classifier...')
+                                self.base_estimator = RandomForestClassifier(n_jobs=-1, n_estimators=100, random_state=random_seed)
                             self.model_name = 'other'
                         else:
                             ### For binary-class problems use RandomForest or the faster ET Classifier ######
@@ -2572,8 +2573,8 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                 from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                             except:
-                                print('pip install imbalanced_ensemble and re-run this again.')
-                                return self
+                                print('imbalanced_ensemble not installed hence trying a different classifier...')
+                                self.base_estimator = RandomForestClassifier(n_jobs=-1, n_estimators=100, random_state=random_seed)
                             self.model_name = 'other'
                         else:
                             ### For multi-class problems use Label Propagation which is faster and better ##
@@ -2614,8 +2615,8 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                 from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                             except:
-                                print('pip install imbalanced_ensemble and re-run this again.')
-                                return self
+                                print('imbalanced_ensemble not installed hence trying a different classifier...')
+                                self.base_estimator = XGBClassifier(n_jobs=-1, n_estimators=100, random_state=random_seed)
                             self.model_name = 'other'
                         else:
                             if self.verbose:
@@ -2643,8 +2644,10 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                 from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
                             except:
-                                print('pip install imbalanced_ensemble and re-run this again.')
-                                return self
+                                print('imbalanced_ensemble not installed hence trying a different classifier...')
+                                class_weights = get_class_weights(y)
+                                self.base_estimator = RandomForestClassifier(n_jobs=-1, n_estimators=100, 
+                                                        random_state=random_seed, class_weight=class_weights)
                             self.model_name = 'other'
                         else:
                             #if self.weights:
@@ -4335,7 +4338,7 @@ def data_cleaning_suggestions(df):
 
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '1.13'
+version_number =  '1.14'
 print(f"""{module_type} lazytransform v{version_number}. 
 """)
 #################################################################################
