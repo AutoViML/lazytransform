@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="lazytransform",
-    version="1.14",
+    version="1.15",
     author="Ram Seshadri",
     # author_email="author@example.com",
     description="Clean your data using a scikit-learn transformer in a single line of code",
@@ -17,7 +17,7 @@ setuptools.setup(
     packages=setuptools.find_packages(exclude=("tests",)),
     install_requires=[
     "numpy>=1.20.3",
-    "pandas>=1.2.4",
+    "pandas>=1.2.4, <2.0",
     "scikit-learn>=0.24.2,<=1.2.2",
     "python-dateutil>=2.8.1",
     "lightgbm>=3.2.1",

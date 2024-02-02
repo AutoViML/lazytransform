@@ -601,10 +601,16 @@ def create_column_names(Xt, nlpvars=[], catvars=[], discretevars=[], floatvars=[
 
     ### Xt is already a dense array, no need to convert it ##
     if num_len == 0:
-        Xint = pd.DataFrame(Xt[:,:], columns = cols_names, dtype=np.int16)
+        try:
+            Xint = pd.DataFrame(Xt[:,:], columns = cols_names, dtype=np.int16)
+        except:
+            Xint = pd.DataFrame(Xt[:,:], columns = cols_names, dtype=np.int64)
         return Xint
     else:
-        Xint = pd.DataFrame(Xt[:,:-num_len], columns = cols_names, dtype=np.int16)
+        try:
+            Xint = pd.DataFrame(Xt[:,:-num_len], columns = cols_names, dtype=np.int16)
+        except:
+            Xint = pd.DataFrame(Xt[:,:-num_len], columns = cols_names, dtype=np.int64)
         Xnum = pd.DataFrame(Xt[:,-num_len:], columns = num_vars, dtype=np.float32)
         #### this is where we put all the column names together #######
         df = pd.concat([Xint, Xnum], axis=1)
@@ -644,8 +650,11 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], floa
             cat_add = [each_cat+'_'+str(categs[i]) for i in range(len(categs))]
             cols_cat += cat_add
     
-    cols_cat = make_column_names_unique(cols_cat)
-    
+    try:
+        cols_cat = make_column_names_unique(cols_cat)
+    except:
+        print('    Could not check if column names are unique in one-hot. Please double-check.')
+
     cols_discrete = []
     discrete_add = []
     for each_discrete in discretevars:
@@ -666,7 +675,11 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], floa
         except:
             ### if there is no new var to be created, just use the existing discrete vars itself ###
             cols_discrete.append(each_discrete)
-    cols_discrete = make_column_names_unique(cols_discrete)
+
+    try:
+        cols_discrete = make_column_names_unique(cols_discrete)
+    except:
+        print('    Could not check if column names are unique in one-hot. Please double-check.')
     
     cols_nlp = []
     nlp_add = []
@@ -700,7 +713,10 @@ def create_column_names_onehot(Xt, nlpvars=[], catvars=[], discretevars=[], floa
         Xint = pd.DataFrame(Xt[:,:], columns = cols_names, dtype=np.int16)
         return Xint
     else:
-        Xint = pd.DataFrame(Xt[:,:-num_len], columns = cols_names, dtype=np.int16)
+        try:
+            Xint = pd.DataFrame(Xt[:,:-num_len], columns = cols_names, dtype=np.int16)
+        except:
+            Xint = pd.DataFrame(Xt[:,:-num_len], columns = cols_names, dtype=np.int64)
         Xnum = pd.DataFrame(Xt[:,-num_len:], columns = num_vars, dtype=np.float32)
         #### this is where we put all the column names together #######
         df = pd.concat([Xint, Xnum], axis=1)
@@ -1223,7 +1239,10 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
                 rcct = Rare_Class_Combiner_Pipe()
                 ### This is to make missing values dont trip up the transformer ####
                 X_train[[each_catcol]] = X_train[[each_catcol]].fillna('MISSINGVALUE',axis=1)
-                unique_cols = make_column_names_unique(rcct.fit_transform(X_train[each_catcol]).unique().tolist())
+                try:
+                    unique_cols = make_column_names_unique(rcct.fit_transform(X_train[each_catcol]).unique().tolist())
+                except:
+                    unique_cols = rcct.fit_transform(X_train[each_catcol]).unique().tolist()
                 unique_cols = [str(x) for x in unique_cols] ### just make them all strings
                 onehot_dict[each_catcol] = unique_cols
             else:
@@ -1236,7 +1255,10 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
                     #unique_cols = np.where(unique_cols==np.nan, 'missing', unique_cols)
                     #unique_cols = np.where(unique_cols == None, 'missing', unique_cols)
                     unique_cols = [str(x) for x in unique_cols] ### just make them all strings
-                    unique_cols = make_column_names_unique(unique_cols)
+                    try:
+                        unique_cols = make_column_names_unique(unique_cols)
+                    except:
+                        print('    Could not make column names unique during one hot encoding. Please double check...')
                     onehot_dict[each_catcol] = unique_cols
                 else:
                     X_train[[each_catcol]] = X_train[[each_catcol]].fillna('MISSINGVALUE',axis=1)
@@ -1255,7 +1277,10 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
             if combine_rare_flag:
                 rcct = Rare_Class_Combiner_Pipe()
                 X_train[[each_discrete]] = X_train[[each_discrete]].fillna('MISSINGVALUE', axis=1)
-                unique_cols = make_column_names_unique(rcct.fit_transform(X_train[each_discrete]).unique().tolist())
+                try:
+                    unique_cols = make_column_names_unique(rcct.fit_transform(X_train[each_discrete]).unique().tolist())
+                except:
+                    unique_cols = rcct.fit_transform(X_train[each_discrete]).unique().tolist()
                 unique_cols = [str(x) for x in unique_cols] ### just make them all strings
                 onehot_dict[each_discrete] = unique_cols
             else:
@@ -1264,7 +1289,10 @@ def make_simple_pipeline(X_train, y_train, encoders='auto', scalers='',
                     unique_cols = X_train[each_discrete].unique().tolist()
                     #unique_cols = np.where(unique_cols==np.nan, 'missing', unique_cols)
                     unique_cols = [str(x) for x in unique_cols] ### just make them all strings
-                    unique_cols = make_column_names_unique(unique_cols)
+                    try:
+                        unique_cols = make_column_names_unique(unique_cols)
+                    except:
+                        print('    Could not make column names unique during one hot encoding. Please double check...')
                     onehot_dict[each_discrete] = unique_cols
                 else:
                     X_train[[each_discrete]] = X_train[[each_discrete]].fillna('MISSINGVALUE', axis=1)
@@ -4338,7 +4366,7 @@ def data_cleaning_suggestions(df):
 
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '1.14'
+version_number =  '1.15'
 print(f"""{module_type} lazytransform v{version_number}. 
 """)
 #################################################################################
