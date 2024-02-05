@@ -1888,10 +1888,10 @@ class LazyTransformer(TransformerMixin):
         if modeltype == 'Regression':
             scoring = 'neg_mean_squared_error'
             score_name = 'MSE'
-            self.model = LGBMRegressor(random_seed=99)
+            self.model = LGBMRegressor(random_seed=99, verbose=-1)
             self.model.set_params(**init_params)            
         else:
-            self.model = LGBMClassifier(random_seed=99)
+            self.model = LGBMClassifier(random_seed=99, verbose=-1)
             self.model.set_params(**init_params)            
             if grid_search:
                 scoring = 'balanced_accuracy'
@@ -2385,7 +2385,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                             if self.verbose:
                                                 print('    Selecting LGBM Regressor as base estimator...')
                                             self.base_estimator = LGBMClassifier(device=device, random_state=random_seed,
-                                                               class_weight=class_weights, n_jobs=-1,
+                                                               class_weight=class_weights, n_jobs=-1, verbose=-1,
                                                                 )
                                 else:
                                     ### This is for large datasets in Binary classes ###########
@@ -2396,7 +2396,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                             n_jobs=-1,tree_method = 'gpu_hist',gpu_id=0, predictor="gpu_predictor")
                                     else:
                                         self.base_estimator = LGBMClassifier(device=device, random_state=random_seed, 
-                                                            n_jobs=-1,
+                                                            n_jobs=-1, verbose=-1,
                                                             #is_unbalance=True, 
                                                             #max_depth=10, metric=metric,
                                                             #num_class=self.max_number_of_classes,
@@ -2430,7 +2430,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                         self.model_name = 'rf'
                                     else:
                                         self.base_estimator = LGBMClassifier(n_jobs=-1, device=device, 
-                                                                random_state=random_seed)                                    
+                                                                verbose=-1, random_state=random_seed)                                    
                                 else:
                                     if (X.dtypes==float).all() and len(self.features) <= features_limit:
                                         print('    Selecting Label Propagation for multiclass problems...')
@@ -2439,7 +2439,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                         self.model_name = 'lp'
                                     else:
                                         self.base_estimator = LGBMClassifier(n_jobs=-1, device=device, 
-                                                        random_state=random_seed)
+                                                        verbose=-1, random_state=random_seed)
                     else:
                         self.model_name == 'other'
                     ### Now print LGBM if appropriate #######
@@ -2591,7 +2591,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                     if self.verbose:
                                         print('    Selecting LGBM Classifier as base estimator...')
                                     self.base_estimator = LGBMClassifier(device=device, random_state=random_seed, n_jobs=-1,
-                                                            scale_pos_weight=scale_pos_weight,)
+                                                            verbose=-1, scale_pos_weight=scale_pos_weight,)
                     else:
                         ### For Multi-class datasets you can use Regressors for numeric classes ####################
                         if self.imbalanced:
@@ -2622,7 +2622,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                     if self.verbose:
                                         print('    Selecting LGBM Classifier as base estimator...')
                                     self.base_estimator = LGBMClassifier(device=device, random_state=random_seed,
-                                                    n_jobs=-1,
+                                                    n_jobs=-1, verbose=-1, 
                                                     #is_unbalance=False,
                                                     #learning_rate=0.3,
                                                     #max_depth=10,
@@ -2652,7 +2652,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             #self.base_estimator = LGBMClassifier(n_estimators=250, random_state=random_seed, 
                             #            boosting_type ='goss', scale_pos_weight=scale_pos_weight)
                             self.base_estimator = LGBMClassifier(device=device, random_state=random_seed,
-                                                    n_jobs=-1,
+                                                    n_jobs=-1, verbose=-1, 
                                                     #is_unbalance=True,
                                                     #learning_rate=0.3, 
                                                     #max_depth=10, 
@@ -2683,7 +2683,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             if self.verbose:
                                 print('    Selecting LGBM Classifier as base estimator...')
                             self.base_estimator = LGBMClassifier(device=device, random_state=random_seed,
-                                                    n_jobs=-1,
+                                                    n_jobs=-1, verbose=-1, 
                                                     #is_unbalance=False, learning_rate=0.3,
                                                     #max_depth=10, 
                                                     metric='multi_logloss',
@@ -3554,7 +3554,8 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
                                 else:
                                     if self.verbose:
                                         print('    Selecting LGBM Regressor as base estimator...')
-                                    self.base_estimator = LGBMRegressor(n_jobs=-1, device=device, random_state=random_seed)                                    
+                                    self.base_estimator = LGBMRegressor(n_jobs=-1, device=device, 
+                                                        verbose=-1, random_state=random_seed)                                    
                             else:
                                 if len(self.features) <= features_limit:
                                     if self.verbose:
@@ -3574,7 +3575,8 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
                                     else:
                                         if self.verbose:
                                             print('    Selecting LGBM Regressor as base estimator...')
-                                        self.base_estimator = LGBMRegressor(n_jobs=-1,device=device, random_state=random_seed)                                    
+                                        self.base_estimator = LGBMRegressor(n_jobs=-1,device=device, 
+                                                            verbose=-1, random_state=random_seed)                                    
                         else:
                             if gpu_exists:
                                 if self.verbose:
@@ -3584,7 +3586,8 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
                             else:
                                 if self.verbose:
                                     print('    Selecting LGBM Regressor as base estimator...')
-                                self.base_estimator = LGBMRegressor(n_jobs=-1,device=device, random_state=random_seed)
+                                self.base_estimator = LGBMRegressor(n_jobs=-1,device=device, 
+                                                        verbose=-1, random_state=random_seed)
                     else:
                         self.model_name == 'other'
                     # Split data into train and test based on folds          
@@ -3713,7 +3716,8 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
                         else:
                             if self.verbose:
                                 print('    Selecting LGBM Regressor as base estimator...')
-                            self.base_estimator = LGBMRegressor(n_jobs=-1,  random_state=random_seed)
+                            self.base_estimator = LGBMRegressor(n_jobs=-1, device=device, verbose=-1,
+                                                     random_state=random_seed)
                 else:
                     ### For large datasets Better to use LGBM
                     if data_samples >= 1e5:
@@ -3723,7 +3727,8 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
                             self.base_estimator = XGBRegressor(n_jobs=-1,tree_method = 'gpu_hist',
                                 gpu_id=0, predictor="gpu_predictor")
                         else:
-                            self.base_estimator = LGBMRegressor(n_jobs=-1, random_state=random_seed) 
+                            self.base_estimator = LGBMRegressor(n_jobs=-1, device=device, verbose=-1,
+                                                    random_state=random_seed) 
                     else:
                         ### For smaller than Big Data, use Label Propagation which is faster and better ##
                         if (X.dtypes==float).all():
@@ -3752,7 +3757,8 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
                                 else:
                                     if self.verbose:
                                         print('    Selecting LGBM Regressor as base estimator...')
-                                    self.base_estimator = LGBMRegressor(n_jobs=-1, random_state=random_seed) 
+                                    self.base_estimator = LGBMRegressor(n_jobs=-1, device=device, verbose=-1,
+                                                            random_state=random_seed) 
                                 self.model_name = 'lgb'
             else:
                 self.model_name = 'other'
@@ -4366,7 +4372,7 @@ def data_cleaning_suggestions(df):
 
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '1.15'
+version_number =  '1.16'
 print(f"""{module_type} lazytransform v{version_number}. 
 """)
 #################################################################################
