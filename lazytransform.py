@@ -59,7 +59,7 @@ from sklearn.base import RegressorMixin, ClassifierMixin
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.preprocessing import MaxAbsScaler, StandardScaler, MinMaxScaler
 from sklearn.preprocessing import RobustScaler
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, HistGradientBoostingClassifier
 from sklearn.tree import ExtraTreeRegressor, ExtraTreeClassifier
 from sklearn.decomposition import TruncatedSVD
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
@@ -2276,8 +2276,9 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
         if self.imbalanced:
             print('    Imbalanced classes of y = %s' %find_rare_class(y, verbose=self.verbose))
         ################          P I P E L I N E        ##########################
+        base_scaler = MinMaxScaler()
         numeric_transformer = Pipeline(
-            steps=[("imputer", SimpleImputer(strategy="mean", add_indicator=True)), ("scaler", StandardScaler())]
+            steps=[("imputer", SimpleImputer(strategy="mean", add_indicator=True)), ("scaler", base_scaler)]
         )
 
         categorical_transformer_low = Pipeline(
@@ -2290,7 +2291,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
         categorical_transformer_high = Pipeline(
             steps=[
                 ("imputer", SimpleImputer(strategy="constant", fill_value="missing", add_indicator=True)),
-                ("encoding", LabelEncoder()),
+                ("encoding", LabelEncoder(), ("scaler", base_scaler)),
             ]
         )
 
@@ -2306,6 +2307,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
             ]
         )
         ####################################################################################
+        random_seed = 99
         if isinstance(y, pd.DataFrame):
             if len(y.columns) >= 2:
                 number_of_classes = num_classes(y)
@@ -2332,6 +2334,12 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
         num_iterations = int(num_splits * num_repeats)
         scoring = 'balanced_accuracy'
         print('    Number of estimators used in SuloClassifier = %s' %num_iterations)
+        base_rfc = RandomForestClassifier(n_jobs=-1, n_estimators=100, bootstrap= False,
+                                             min_samples_leaf=3, random_state=random_seed)
+        ET = ExtraTreeClassifier()
+        base_bgc = BaggingClassifier(base_estimator=ET, n_jobs=-1)
+        base_rfc = HistGradientBoostingClassifier(learning_rate=0.1, max_iter=100,
+                                        max_bins=25, early_stopping='auto',l2_regularization=1)
         ##### This is where we check if y is single label or multi-label ##
         if isinstance(y, pd.DataFrame):
             ###############################################################
@@ -2349,8 +2357,18 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                 for train_index, test_index in tqdm(kfold.split(X, y), total=kfold.get_n_splits(),
                                             desc="k-fold training"):
                     start_time = time.time()
-                    #random_seed = np.random.randint(2,100)
-                    random_seed = 9999
+
+                    ###### Split data into train and test based on folds #######
+                    if isinstance(y, pd.Series) or isinstance(y, pd.DataFrame):
+                        y_train, y_test = y.iloc[train_index], y.iloc[test_index]                
+                    else:
+                        y_train, y_test = y[train_index], y[test_index]
+
+                    if isinstance(X, pd.DataFrame):
+                        x_train, x_test = X.iloc[train_index], X.iloc[test_index]
+                    else:
+                        x_train, x_test = X[train_index], X[test_index]
+
                     if self.base_estimator is None:
                         if self.max_number_of_classes <= 1:
                             ##############################################################
@@ -2363,7 +2381,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                 except:
                                     print('pip install imbalanced_ensemble and re-run this again.')
                                     return self
-                                self.model_name = 'other'
+                                self.model_name = 'spe'
                             else:
                                 ### make it a regular dictionary with weights for pos and neg classes ##
                                 class_weights = dict([v for k,v in class_weights.items()][0])
@@ -2376,11 +2394,14 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                         self.model_name = 'lp'
                                     else:
                                         if len(self.features) <= features_limit:
-                                            if self.verbose:
-                                                print('    Selecting Bagging Classifier for this dataset...')
+                                            #print('    Selecting Bagging Classifier for this dataset...')
                                             ET = ExtraTreeClassifier()
-                                            self.base_estimator = BaggingClassifier(base_estimator=ET, n_jobs=-1)
-                                            self.model_name = 'bg'
+                                            #self.base_estimator = BaggingClassifier(base_estimator=ET, n_jobs=-1)
+                                            #self.model_name = 'bg'
+                                            print('    Selecting class weighted RandomForest Classifier...')
+                                            #class_weights = get_class_weights(y_train)
+                                            self.base_estimator = base_rfc
+                                            self.model_name = 'rf'
                                         else:
                                             if self.verbose:
                                                 print('    Selecting LGBM Regressor as base estimator...')
@@ -2417,10 +2438,12 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                 try:
                                     from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                     self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
+                                    self.model_name = 'spe'
                                 except:
-                                    print('pip install imbalanced_ensemble and re-run this again.')
-                                    return self
-                                self.model_name = 'other'
+                                    print('    Selecting class weighted RandomForest Classifier...')
+                                    #class_weights = get_class_weights(y_train)
+                                    self.base_estimator = base_rfc
+                                    self.model_name = 'rf'
                             else:
                                 if data_samples <= row_limit:
                                     if len(self.features) <= features_limit:
@@ -2431,6 +2454,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                     else:
                                         self.base_estimator = LGBMClassifier(n_jobs=-1, device=device, 
                                                                 verbose=-1, random_state=random_seed)                                    
+                                        self.model_name = 'lgb'
                                 else:
                                     if (X.dtypes==float).all() and len(self.features) <= features_limit:
                                         print('    Selecting Label Propagation for multiclass problems...')
@@ -2440,21 +2464,12 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                     else:
                                         self.base_estimator = LGBMClassifier(n_jobs=-1, device=device, 
                                                         verbose=-1, random_state=random_seed)
+                                        self.model_name = 'lgb'
                     else:
                         self.model_name == 'other'
                     ### Now print LGBM if appropriate #######
                     if self.verbose and self.model_name=='lgb':
                         print('    Selecting LGBM Classifier as base estimator...')
-                    # Split data into train and test based on folds          
-                    if isinstance(y, pd.Series) or isinstance(y, pd.DataFrame):
-                        y_train, y_test = y.iloc[train_index], y.iloc[test_index]                
-                    else:
-                        y_train, y_test = y[train_index], y[test_index]
-
-                    if isinstance(X, pd.DataFrame):
-                        x_train, x_test = X.iloc[train_index], X.iloc[test_index]
-                    else:
-                        x_train, x_test = X[train_index], X[test_index]
 
                     ###### Do this only the first time ################################################
                     if i == 0:
@@ -2556,8 +2571,19 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                         desc="k-fold training"):
             start_time = time.time()
             random_seed = np.random.randint(2,100)
-            ##########  This is where we do multi-seed classifiers #########
             
+            ##### Split data into train and test based on folds  ################
+            if isinstance(y, pd.Series) or isinstance(y, pd.DataFrame):
+                y_train, y_test = y.iloc[train_index], y.iloc[test_index]                
+            else:
+                y_train, y_test = y[train_index], y[test_index]
+
+            if isinstance(X, pd.DataFrame):
+                x_train, x_test = X.iloc[train_index], X.iloc[test_index]
+            else:
+                x_train, x_test = X[train_index], X[test_index]
+            
+            ##########  This is where we do multi-seed classifiers #########
             if self.base_estimator is None:
                 if data_samples <= row_limit:
                     ### For small datasets use RFC for Binary Class   ########################
@@ -2568,10 +2594,12 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             try:
                                 from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
+                                self.model_name = 'spe'
                             except:
                                 print('imbalanced_ensemble not installed hence trying a different classifier...')
-                                self.base_estimator = RandomForestClassifier(n_jobs=-1, n_estimators=100, random_state=random_seed)
-                            self.model_name = 'other'
+                                #class_weights = get_class_weights(y_train)
+                                self.base_estimator = base_rfc
+                                self.model_name = 'rf'
                         else:
                             ### For binary-class problems use RandomForest or the faster ET Classifier ######
                             if (X.dtypes==float).all() and len(self.features) <= features_limit:
@@ -2581,12 +2609,15 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                 self.model_name = 'lp'
                             else:
                                 if len(self.features) <= features_limit:
-                                    if self.verbose:
-                                        print('    Selecting Bagging Classifier for this dataset...')
+                                    #print('    Selecting Bagging Classifier for this dataset...')
                                     ### The Bagging classifier outperforms ETC most of the time ####
                                     ET = ExtraTreeClassifier()
-                                    self.base_estimator = BaggingClassifier(base_estimator=ET, n_jobs=-1)
-                                    self.model_name = 'bg'
+                                    #self.base_estimator = BaggingClassifier(base_estimator=ET, n_jobs=-1)
+                                    #self.model_name = 'bg'
+                                    print('    Selecting class weighted RandomForest Classifier...')
+                                    #class_weights = get_class_weights(y_train)
+                                    self.base_estimator = base_rfc
+                                    self.model_name = 'rf'
                                 else:
                                     if self.verbose:
                                         print('    Selecting LGBM Classifier as base estimator...')
@@ -2600,10 +2631,13 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             try:
                                 from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
+                                self.model_name = 'spe'
                             except:
                                 print('imbalanced_ensemble not installed hence trying a different classifier...')
-                                self.base_estimator = RandomForestClassifier(n_jobs=-1, n_estimators=100, random_state=random_seed)
-                            self.model_name = 'other'
+                                #class_weights = get_class_weights(y_train)
+                                self.base_estimator = RandomForestClassifier(n_jobs=-1, n_estimators=100, 
+                                                            min_samples_leaf=3, random_state=random_seed)
+                                self.model_name = 'rf'
                         else:
                             ### For multi-class problems use Label Propagation which is faster and better ##
                             if (X.dtypes==float).all() and len(self.features) <= features_limit:
@@ -2613,11 +2647,14 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                                     self.model_name = 'lp'
                             else:
                                 if len(self.features) <= features_limit:
-                                    if self.verbose:
-                                        print('    Selecting Bagging Classifier for this dataset...')
+                                    #print('    Selecting Bagging Classifier for this dataset...')
                                     ET = ExtraTreeClassifier()
-                                    self.base_estimator = BaggingClassifier(base_estimator=ET, n_jobs=-1)
-                                    self.model_name = 'bg'
+                                    #self.base_estimator = BaggingClassifier(base_estimator=ET, n_jobs=-1)
+                                    #self.model_name = 'bg'
+                                    print('    Selecting class weighted RandomForest Classifier...')
+                                    #class_weights = get_class_weights(y_train)
+                                    self.base_estimator = base_rfc
+                                    self.model_name = 'rf'
                                 else:
                                     if self.verbose:
                                         print('    Selecting LGBM Classifier as base estimator...')
@@ -2642,10 +2679,12 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             try:
                                 from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
+                                self.model_name = 'spe'
                             except:
                                 print('imbalanced_ensemble not installed hence trying a different classifier...')
-                                self.base_estimator = XGBClassifier(n_jobs=-1, n_estimators=100, random_state=random_seed)
-                            self.model_name = 'other'
+                                #class_weights = get_class_weights(y_train)
+                                self.base_estimator = base_rfc
+                                self.model_name = 'rf'
                         else:
                             if self.verbose:
                                 print('    Selecting LGBM Classifier for this dataset...')
@@ -2671,12 +2710,12 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                             try:
                                 from imbalanced_ensemble.ensemble import SelfPacedEnsembleClassifier
                                 self.base_estimator = SelfPacedEnsembleClassifier(n_jobs=-1, random_state=random_seed)
+                                self.model_name = 'spe'
                             except:
                                 print('imbalanced_ensemble not installed hence trying a different classifier...')
-                                class_weights = get_class_weights(y)
-                                self.base_estimator = RandomForestClassifier(n_jobs=-1, n_estimators=100, 
-                                                        random_state=random_seed, class_weight=class_weights)
-                            self.model_name = 'other'
+                                #class_weights = get_class_weights(y_train)
+                                self.base_estimator = base_rfc
+                                self.model_name = 'rf'
                         else:
                             #if self.weights:
                             #    class_weights = None
@@ -2696,19 +2735,6 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
             else:
                 self.model_name = 'other'
 
-
-            # Split data into train and test based on folds          
-            if isinstance(y, pd.Series) or isinstance(y, pd.DataFrame):
-                y_train, y_test = y.iloc[train_index], y.iloc[test_index]                
-            else:
-                y_train, y_test = y[train_index], y[test_index]
-
-            if isinstance(X, pd.DataFrame):
-                x_train, x_test = X.iloc[train_index], X.iloc[test_index]
-            else:
-                x_train, x_test = X[train_index], X[test_index]
-
-            
             ##   small datasets processing #####
             if i == 0:
                 if self.pipeline:
@@ -2719,6 +2745,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                         print('No HPT tuning performed since base estimator is given by input...')
                         self.base_estimator = copy.deepcopy(pipe)
                     else:
+                        print('Performing HPTuning using %s automatically chosen. This will take time...' %(str(self.base_estimator).split("(")[0]))
                         if len(self.features) <= features_limit:
                             self.base_estimator = rand_search(pipe, x_train, y_train, 
                                                     self.model_name, self.pipeline, scoring, verbose=self.verbose)
@@ -2731,6 +2758,7 @@ class SuloClassifier(BaseEstimator, ClassifierMixin):
                         ### leave the base estimator as is ###
                         print('No HPT tuning performed since base estimator is given by input...')
                     else:
+                        print('Performing HPTuning using %s automatically chosen. This will take time...' %(str(self.base_estimator).split("(")[0]))
                         if len(self.features) <= features_limit:
                             ### leave the base estimator as is ###
                             self.base_estimator = rand_search(self.base_estimator, x_train, 
@@ -2878,11 +2906,39 @@ def rand_search(model, X, y, model_name, pipe_flag=False, scoring=None, verbose=
         model_string = ''
     ### set n_iter here ####
     if X.shape[0] <= 10000:
-        n_iter = 10
-    else:
         n_iter = 5
-    if model_name == 'rf':
-        #criterion = ["gini", "entropy", "log_loss"]
+    else:
+        n_iter = 10
+    if model_name == 'rfx':
+        ### These are the ones that work best for multi-class problems ###
+        criterion = ["gini", "entropy", "log_loss"]
+        # Number of trees in random forest
+        n_estimators = sp_randInt(50, 200)
+        # Number of features to consider at every split
+        #max_features = ['auto', 'sqrt', 'log']
+        max_features = sp.stats.uniform(scale=1)
+        # Maximum number of levels in tree
+        max_depth = sp_randInt(2, 10)
+        # Minimum number of samples required to split a node
+        min_samples_split = sp_randInt(2, 10)
+        # Minimum number of samples required at each leaf node
+        min_samples_leaf = sp_randInt(2, 10)
+        # Method of selecting samples for training each tree
+        bootstrap = [True, False]
+        ###  These are the RandomForest params ########        
+        params = {
+            #model_string+'criterion': criterion,
+            #model_string+'class_weight': [None, "balanced", "balanced_subsample"],
+            model_string+'n_estimators': n_estimators,
+            model_string+'max_features': max_features,
+            #model_string+'max_depth': max_depth,
+            model_string+'bootstrap': bootstrap,
+                       }
+    elif model_name == 'rf':
+        ###  WE DO NOT USE THIS CURRENTLY SINCE IT MAKES RFC OVERFIT ##############
+        ### Putting all params makes it overfit and very poor perf on test dataset 
+        ###########################################################################
+        criterion = ["gini", "entropy", "log_loss"]
         # Number of trees in random forest
         n_estimators = sp_randInt(100, 300)
         # Number of features to consider at every split
@@ -2895,15 +2951,19 @@ def rand_search(model, X, y, model_name, pipe_flag=False, scoring=None, verbose=
         min_samples_leaf = sp_randInt(2, 10)
         # Method of selecting samples for training each tree
         bootstrap = [True, False]
+        ### this is for the HistGradientClassifier only ##
+        interaction_cst = [None, 'no_interactions','pairwise']
         ###  These are the RandomForest params ########        
         params = {
             #model_string+'criterion': criterion,
-            model_string+'n_estimators': n_estimators,
-            model_string+'max_features': max_features,
+            model_string+'class_weight': ["balanced", None],
+            #model_string+'n_estimators': n_estimators,
+            #model_string+'max_features': max_features,
             #model_string+'max_depth': max_depth,
             #model_string+'min_samples_split': min_samples_split,
             #model_string+'min_samples_leaf': min_samples_leaf,
-           #model_string+'bootstrap': bootstrap,
+            #model_string+'bootstrap': bootstrap,
+            model_string+'interaction_cst': interaction_cst,
                        }
     elif model_name == 'bg':
         criterion = ["gini", "entropy", "log_loss"]
@@ -2912,7 +2972,7 @@ def rand_search(model, X, y, model_name, pipe_flag=False, scoring=None, verbose=
         # Number of features to consider at every split
         #max_features = ['auto', 'sqrt', 'log']
         #max_features = sp_randFloat(0.3,0.9)
-        max_features = [0.3, 0.6, 1.0]
+        max_features = sp.stats.uniform(scale=1)
         # Maximum number of levels in tree
         max_depth = sp_randInt(2, 10)
         # Minimum number of samples required to split a node
@@ -2929,7 +2989,7 @@ def rand_search(model, X, y, model_name, pipe_flag=False, scoring=None, verbose=
             #model_string+'max_depth': max_depth,
             #model_string+'min_samples_split': min_samples_split,
             #model_string+'min_samples_leaf': min_samples_leaf,
-            #model_string+'bootstrap': bootstrap,
+            model_string+'bootstrap': bootstrap,
             #model_string+'bootstrap_features': bootstrap,
                        }
     elif model_name == 'lgb':
@@ -2949,6 +3009,14 @@ def rand_search(model, X, y, model_name, pipe_flag=False, scoring=None, verbose=
             ### Don't overly complicate this simple model. It works best with no tuning!
             model_string+'gamma': sp_randInt(0, 32),
             model_string+'kernel': ['knn', 'rbf'],
+            #model_string+'max_iter': sp_randInt(50, 500),
+            #model_string+'n_neighbors': sp_randInt(2, 5),
+                }
+    elif model_name == 'spe':
+        params =  {
+            ### Don't overly complicate this simple model. It works best with no tuning!
+            model_string+'n_estimators': sp_randInt(10, 50),
+            model_string+'k_bins': [3, 5, 10],
             #model_string+'max_iter': sp_randInt(50, 500),
             #model_string+'n_neighbors': sp_randInt(2, 5),
                 }
@@ -3203,21 +3271,9 @@ from sklearn.metrics import balanced_accuracy_score, classification_report
 import pdb
 def print_sulo_accuracy(y_test, y_preds, y_probas='', verbose=0):
     """
-    A wrapper function for print_classification_metrics, specifically focused on classification metrics
-
-    Note:
-    This function is a direct call to print_classification_metrics with the same parameters. It serves as 
-    a bridge function since some older versions of lazytransform use this.
-
-    Examples:
-    # For single-label binary classification
-    print_sulo_accuracy(y_test, y_preds)
-
-    # For multi-label classification with verbose output
-    print_sulo_accuracy(y_test, y_preds, verbose=1)
-
-    # For single-label classification with predicted probabilities
-    print_sulo_accuracy(y_test, y_preds, y_probas)
+    A wrapper function for print_classification_metrics,  meant for compatibility with older featurewiz versions.
+    Usage:
+    print_sulo_accuracy(y_test, y_preds, y_probas, verbose-0)
     """
     return print_classification_metrics(y_test, y_preds, y_probas, verbose)
 
@@ -3458,8 +3514,10 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
             self.integers_only_min_max = get_max_min_from_y(y)
             print('    Min and max values of y = %s' %self.integers_only_min_max)
         ################          P I P E L I N E        ##########################
+        #base_scaler = StandardScaler()
+        base_scaler = MinMaxScaler()
         numeric_transformer = Pipeline(
-            steps=[("imputer", SimpleImputer(strategy="mean", add_indicator=True)), ("scaler", StandardScaler())])
+            steps=[("imputer", SimpleImputer(strategy="mean", add_indicator=True)), ("scaler", base_scaler)])
 
         categorical_transformer_low = Pipeline(
             steps=[
@@ -3469,7 +3527,7 @@ class SuloRegressor(BaseEstimator, RegressorMixin):
         categorical_transformer_high = Pipeline(
             steps=[
                 ("imputer", SimpleImputer(strategy="constant", fill_value="missing", add_indicator=True)),
-                ("encoding", LabelEncoder()),])
+                ("encoding", LabelEncoder()),("scaler", base_scaler)])
 
         numeric_features = X.select_dtypes(include='number').columns
         categorical_features = X.select_dtypes(include=["object"]).columns
