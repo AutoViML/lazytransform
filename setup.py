@@ -25,6 +25,7 @@ setuptools.setup(
         "matplotlib>=3.4.2",
         "category-encoders>=2.6.2",
         "tqdm>=4.61.1",
+        "xgboost>=1.6",
     ],
     include_package_data = True,
     classifiers=[
