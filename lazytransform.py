@@ -4430,7 +4430,7 @@ def data_cleaning_suggestions(df):
 
 ############################################################################################
 module_type = 'Running' if  __name__ == "__main__" else 'Imported'
-version_number =  '1.17'
+version_number =  '1.18'
 print(f"""{module_type} lazytransform v{version_number}. 
 """)
 #################################################################################
